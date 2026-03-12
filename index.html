@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino Line Follower Advanced Simulator</title>
+    
+    <!-- Dependencias para la nueva pestaña Guía (Tailwind primero para que style.css pueda sobreescribir) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            blue: '#2563EB',
+                            dark: '#1E293B',
+                            light: '#F8FAFC',
+                            accent: '#F59E0B'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs/loader.min.js"></script>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1976d2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="assets/Logo%20guaroduino.png">
+    <style>
+        /* Estilos específicos para la pestaña Guía */
+        #guia { background-color: #F1F5F9; }
+        #guia .glass-card {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid #E2E8F0;
+        }
+        #guia .prose img { border-radius: 0.5rem; margin: 1.5rem auto; display: block; max-width: 100%; height: auto; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        #guia pre[class*="language-"] { border-radius: 0.5rem; margin-top: 0; }
+        #guia .copy-btn { transition: all 0.2s; }
+        #guia .copy-btn:hover { background-color: #3B82F6; color: white; }
+        #guia details {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #E2E8F0;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+        #guia summary {
+            padding: 1rem 1.5rem; /* Reducido de 1.5rem */
+            font-size: 1.25rem; /* Reducido de 1.5rem */
+            font-weight: bold;
+            color: #1E293B;
+            cursor: pointer;
+            list-style: none; /* Hide default arrow in some browsers */
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #F8FAFC;
+        }
+        #guia summary::-webkit-details-marker {
+            display: none;
+        }
+        #guia summary::after {
+            content: "▼";
+            font-size: 1rem;
+            transition: transform 0.3s;
+        }
+        #guia details[open] summary::after {
+            transform: rotate(180deg);
+        }
+        #guia details[open] summary {
+            border-bottom: 1px solid #E2E8F0;
+        }
+        #guia .details-content {
+            padding: 1.5rem;
+        }
+        
+        /* Restoring basic styles for tutorial tab due to tailwind reset */
+        #introduccion h1 { font-size: 2em; font-weight: bold; margin-bottom: 0.5em; }
+        #introduccion h3 { font-size: 1.17em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        #introduccion p { margin-top: 0.5em; margin-bottom: 0.5em; }
+        #introduccion ul { list-style-type: disc; padding-left: 40px; margin-top: 1em; margin-bottom: 1em; }
+        #introduccion li { display: list-item; margin-bottom: 0.5em; }
+        #introduccion b { font-weight: bold; }
+        #introduccion i { font-style: italic; }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="header-flex">
+            <div class="header-title-nav">
+                <h1>Simulador de Seguidor de Lineas</h1>
+                <nav class="tabs">
+                    <button class="tab-button active" data-tab="introduccion">Tutorial</button>
+                    <button class="tab-button" data-tab="guia">Guía</button>
+                    <button class="tab-button" data-tab="robot-editor">Editor de Robot</button>
+                    <button class="tab-button" data-tab="code-editor">Editor de Código</button>
+                    <button class="tab-button" data-tab="track-editor">Editor de Pista</button>
+                    <button class="tab-button" data-tab="simulation">Simulación</button>
+                </nav>
+            </div>
+            <div class="header-actions">
+                <div class="global-scale-control">
+                    <label>Zoom:</label>
+                    <button class="zoom-btn" id="zoomOutBtn" title="Alejar">-</button>
+                    <span id="globalScaleValue">100%</span>
+                    <button class="zoom-btn" id="zoomInBtn" title="Acercar">+</button>
+                    <button class="zoom-btn" id="fullScreenBtn" title="Pantalla Completa">⛶</button>
+                </div>
+                <img src="assets/Logo%20guaroduino.png" alt="Logo Guaroduino" class="header-logo">
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Introducción Tab -->
+        <div id="introduccion" class="tab-content active">
+            <div style="max-width:900px;margin:2em auto 0 auto;text-align:justify;">
+                <h1 style="text-align:center; color: var(--primary-color);">🤖 Guía Rápida: ¿Cómo usar el simulador?</h1>
+                <p style="text-align:center; font-size: 1.1em;">
+                    Bienvenido al Simulador de Robots Seguidores de Línea. Sigue estos sencillos pasos para crear, programar y probar tu primer robot en nuestro entorno virtual.
+                </p>
+                <hr>
+
+                <div style="margin-top: 2em;">
+                    <h3>🛠️ Paso 1: Crea tu Robot (Pestaña "Editor de Robot")</h3>
+                    <p>
+                        Aquí definirás las características físicas y electrónicas de tu vehículo:
+                    </p>
+                    <ul>
+                        <li>Atributos físicos: Ancho, agarre de llantas, y posición de los sensores.</li>
+                        <li>Configuración electrónica: Selecciona los pines de tu placa Arduino a los cuales conectarás tanto los motores como los sensores.</li>
+                        <li>Diseño visual: Arrastra componentes de la paleta lateral para construir tu chasis.</li>
+                        <li><b>Importante:</b> Recuerda darle al botón verde <b>"Cargar Diseño en Simulador"</b> al terminar para aplicar tus cambios.</li>
+                    </ul>
+                    <p style="background: #e3f2fd; padding: 10px; border-left: 4px solid #2196f3; border-radius: 4px;">
+                        <i>💡 <b>Shortcut:</b> Si quieres ver algo funcionando rápido, haz clic en el botón <b>"Cargar Ejemplo"</b> en esta pestaña para tener un robot de 2 sensores ensamblado de inmediato.</i>
+                    </p>
+                </div>
+
+                <hr>
+
+                <div style="margin-top: 2em;">
+                    <h3>💻 Paso 2: Programa tu Lógica (Pestaña "Editor de Código")</h3>
+                    <p>
+                        Escribe el código C++ (estilo Arduino) para darle un "cerebro" al robot. Deberás leer los sensores con <code>digitalRead()</code> y mover los motores con <code>digitalWrite()</code> o <code>analogWrite()</code>.
+                    </p>
+                    <ul>
+                        <li>Recuerda usar las variables y tipos de la sintaxis nativa (<code>int</code>, <code>if/else</code>, <code>void setup()</code>).</li>
+                        <li>Al terminar de escribir, haz clic siempre en el botón verde <b>"Cargar Código en Simulador"</b> para transpilar y cargar el código a la memoria del simulador.</li>
+                    </ul>
+                    <p style="background: #e3f2fd; padding: 10px; border-left: 4px solid #2196f3; border-radius: 4px;">
+                        <i>💡 <b>Shortcut:</b> Haz clic en el botón <b>"Cargar Ejemplo"</b> en la parte baja del editor para inyectar automáticamente un algoritmo básico compatible con el robot del Paso 1.</i>
+                    </p>
+                </div>
+
+                <hr>
+
+                <div style="margin-top: 2em;">
+                    <h3>🏁 Paso 3: Diseña tu Circuito (Pestaña "Editor de Pista")</h3>
+                    <p>
+                        Usa nuestra herramienta de dibujo en base a cuadrícula para crear cualquier diseño de pista:
+                    </p>
+                    <ul>
+                        <li>Selecciona curvas y trazos rectos del menú izquierdo y colócalos en el lienzo.</li>
+                        <li>O agrega el botón <b>"Pista Aleatoria"</b> para generar diferentes retos.</li>
+                        <li>Al terminar, asegúrate de presionar el botón verde <b>"Cargar Pista en Simulador"</b> para enviar el circuito.</li>
+                    </ul>
+                </div>
+
+                <hr>
+
+                <div style="margin-top: 2em;">
+                    <h3>🏎️ Paso 4: ¡A Correr! (Pestaña "Simulación")</h3>
+                    <p>
+                        Tu área de pruebas final. Una vez aplicados el diseño de la pista, la geometría del robot y el código:
+                    </p>
+                    <ul>
+                        <li>No olvides definir tu <b>Línea de Salida/Meta</b> haciendo clic en el botón de Ubicar Línea y haciendo clic sobre la pista.</li>
+                        <li>Presiona <b>"Iniciar"</b> para que comience la ejecución.</li>
+                        <li>Revisa el <b>Monitor Serial</b> para depurar errores si tu robot no hace lo que esperabas.</li>
+                        <li>Observa tus tiempos por vuelta en la ventana de cronometraje ⏱️.</li>
+                    </ul>
+                </div>
+
+                <div style="text-align:center; margin-top:3em; font-size:1.2em; border: 2px dashed var(--primary-color); padding: 1em; border-radius: 8px;">
+                    <b>¡Sigue el orden de estas pestañas, experimenta y conviértete en un experto en robótica!</b>
+                </div>
+            </div>
+        </div>
+
+        <!-- Simulation Tab -->
+        <div id="simulation" class="tab-content">
+            <div class="simulation-layout simulation-double-column">
+                <div class="simulation-view">
+                    <div class="simulation-canvas-container">
+                        <canvas id="simulationDisplayCanvas" width="700" height="500"></canvas>
+                        <div class="sim-camera-controls">
+                            <button id="simZoomInBtn" title="Acercar Cámara" class="cam-btn">+</button>
+                            <button id="simZoomOutBtn" title="Alejar Cámara" class="cam-btn">-</button>
+                            <button id="simFitTrackBtn" title="Pista Completa" class="cam-btn">[ ]</button>
+                            <button id="simFollowRobotBtn" title="Seguir Robot" class="cam-btn">🤖</button>
+                            <button id="simFullscreenBtn" title="Pantalla Completa" class="cam-btn">🔲</button>
+                            <button id="simDemoBtn" title="Demo SVP 2025" class="cam-btn"
+                                style="margin-top: 10px;">🏎️</button>
+                        </div>
+                    </div>
+                    <div class="simulation-controls">
+                        <button id="startSimButton" style="background-color: #4CAF50; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer;">Iniciar</button>
+                        <button id="stopSimButton" disabled style="background-color: #f44336; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer;">Detener</button>
+                        <button id="resetSimButton">Reiniciar Sim</button>
+                        <button id="placeStartLineSimButton">Ubicar Línea de Comienzo</button>
+                    </div>
+                </div>
+                <div class="sim-right-panel">
+                    <div class="simulation-parameters">
+                        <details id="simParamsDetails">
+                            <summary>
+                                <h3 style="display:inline; font-size:1.1em; font-weight:600; margin:0;">Parámetros de
+                                    Simulación</h3>
+                            </summary>
+                            <label for="timeStep">Paso de Tiempo (s):</label>
+                            <input type="number" id="timeStep" value="0.01" step="0.001" min="0.001">
+                            <label for="maxRobotSpeed">Vel. Máx. Robot (m/s):</label>
+                            <input type="number" id="maxRobotSpeed" value="1.0" step="0.05" min="0.05">
+                            <label for="motorEfficiency">Eficiencia Motor (0-1):</label>
+                            <input type="number" id="motorEfficiency" value="0.85" step="0.01" min="0.1" max="1">
+                            <label for="motorImbalance">Diferencia Motores (-0.5 a 0.5):</label>
+                            <input type="number" id="motorImbalance" value="0.1" step="0.01" min="-0.5" max="0.5">
+                            <label for="motorResponse">Respuesta Motor (0-1):</label>
+                            <input type="number" id="motorResponse" value="0.04" step="0.01" min="0.01" max="1">
+                            <label for="sensorNoise">Ruido Sensor (0-1):</label>
+                            <input type="number" id="sensorNoise" value="0.0" step="0.01" min="0" max="1">
+                            <label for="movementPerturb">Perturb. Movim. (0-1):</label>
+                            <input type="number" id="movementPerturb" value="0.0" step="0.01" min="0" max="1">
+                            <label for="motorDeadband">PWM Banda Muerta Motor:</label>
+                            <input type="number" id="motorDeadband" value="40" step="1" min="0">
+                            <label for="lineThreshold">Umbral Línea (0-255):</label>
+                            <input type="number" id="lineThreshold" value="100" step="1" min="0" max="255">
+
+                            <button id="applySimParamsButton" style="grid-column: 1 / -1; margin-top: 10px;">Aplicar
+                                Parámetros</button>
+                        </details>
+                    </div>
+                    <!-- Monitor Serial y Cronómetro -->
+                    <div class="sim-monitor-column">
+                        <h4>Monitor Serial</h4>
+                        <pre id="serialMonitorOutput"></pre>
+                        <button id="clearSerialButton" type="button">Limpiar Serial</button>
+                        <h4>Cronómetro</h4>
+                        <pre id="lapTimerOutput">Vueltas: 0 | Mejor: --:--:--- | Actual: --:--:---</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Code Editor Tab -->
+        <div id="code-editor" class="tab-content">
+            <div class="code-editor-layout">
+                <div class="code-editor-container">
+                    <div style="margin-bottom: 0.5em;">
+                        <strong style="font-size: 1.1em; color: var(--primary-color);">Código</strong>
+                    </div>
+                    <div id="monacoContainer" style="height: 600px; border: 1px solid #ccc;"></div>
+                    <div style="display:flex; gap:0.5em; margin:1em 0; align-items: stretch; justify-content: space-between;">
+                        <button id="downloadCodeButton" style="flex:1; margin:0; padding:0.8em; display:flex; align-items:center; justify-content:center; box-sizing:border-box; height:auto; min-height: 2.8em;">Descargar Código</button>
+                        <label for="uploadCodeInput" class="file-input-label"
+                            style="flex:1; margin:0; padding:0.8em; display:flex; align-items:center; justify-content:center; box-sizing:border-box; height:auto; min-height: 2.8em; text-align:center; cursor:pointer;">Cargar Código
+                            <input type="file" id="uploadCodeInput" accept=".txt,.js,.ino,.cpp" style="display:none;">
+                        </label>
+                        <button id="loadExampleCodeButton" style="flex:1; margin:0; padding:0.8em; display:flex; align-items:center; justify-content:center; box-sizing:border-box; height:auto; min-height: 2.8em;">Cargar Ejemplo</button>
+                    </div>
+                    <div class="code-editor-actions" style="margin-top: 1em;">
+                        <button id="applyCodeButton" class="action-btn run-btn" title="Cargar Código en Simulador" style="background-color: #4CAF50; color: white; border: none; padding: 10px 20px; text-transform: uppercase; font-weight: bold; border-radius: 4px; cursor: pointer;">
+                            <span class="btn-icon">▶</span>
+                            Cargar Código en Simulador
+                        </button>
+                    </div>
+
+                    <!-- Monitor Serial para el Editor de Código -->
+                    <div class="code-editor-serial" style="margin-top: 2em; background-color: #f8f9fa; padding: 1.5em; border-radius: 8px; border: 1px solid #e9ecef;">
+                        <h4>Monitor Serial</h4>
+                        <pre id="serialMonitorOutputCodeEditor" style="background-color: #ffffff; color: #333333; padding: 1em; border-radius: 4px; height: 150px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ccc;"></pre>
+                        <button id="clearSerialButtonCodeEditor" type="button" style="margin-top: 0.5em;">Limpiar Serial</button>
+                    </div>
+
+                    <div class="editor-help"
+                        style="margin-top: 2em; background-color: #f8f9fa; padding: 1.5em; border-radius: 8px; border: 1px solid #e9ecef;">
+                        <h2>Editor de Código</h2>
+                        <h3>¿Cómo usar este editor?</h3>
+                        <p>¡Aquí puedes escribir el código que controla tu robot usando sintaxis estilo Arduino!
+                            Revisa la sintaxis, edita el código y haz click en 'Aplicar Código' para ver cómo responde
+                            el robot en la simulación.
+                            Si te equivocas, no pasa nada, puedes volver a intentarlo o recargar la página para
+                            recuperar el código original.</p>
+
+                        <h4>¿Cómo referenciar componentes en tu código?</h4>
+                        <p style="margin-bottom:0.8em">Los <b>pines de los sensores</b> varían dependiendo de la
+                            cantidad configurada en la pestaña <b>Editor de Robot</b>. Usan
+                            <code>digitalRead(pin)</code>:
+                        </p>
+                        <ul style="margin-top:0">
+                            <li><b>Robot de 2 Sensores:</b> <code>pin 2</code> (Izquierdo) y <code>pin 4</code>
+                                (Derecho)</li>
+                            <li><b>Robot de 3 Sensores:</b> <code>pin 2</code> (Izq.), <code>pin 3</code> (Centro),
+                                <code>pin 4</code> (Der.)
+                            </li>
+                            <li><b>Robot de 4 Sensores:</b> <code>pin 5</code> (Extremo Izq.), <code>pin 2</code>
+                                (Izq.), <code>pin 4</code> (Der.), <code>pin 6</code> (Extremo Der.)</li>
+                            <li><b>Robot de 5 Sensores:</b> <code>pin 5</code>, <code>pin 2</code>, <code>pin 3</code>,
+                                <code>pin 4</code>, <code>pin 6</code> (De la izquierda a la derecha)
+                            </li>
+                        </ul>
+                        <p style="margin-bottom:0.8em">Los <b>pines de los motores</b> son siempre los mismos. Usan
+                            <code>analogWrite(pin, valor)</code> (0 a 255):
+                        </p>
+                        <ul style="margin-top:0">
+                            <li><b>Motor Izquierdo:</b> <code>pin 9</code></li>
+                            <li><b>Motor Derecho:</b> <code>pin 10</code></li>
+                        </ul>
+                        <p>Usa solo los pines que correspondan a tu robot; el simulador asume que los sensores no
+                            conectados siempre leen <b>1</b> (afuera de la línea).</p>
+
+                        <h4>Funciones que puedes usar:</h4>
+                        <ul>
+                            <li><strong>setup()</strong>: Se ejecuta una vez al comenzar. Aquí configuras los
+                                <code>pinMode</code>.
+                            </li>
+                            <li><strong>loop()</strong>: Se repite muchas veces rápidamente. Aquí va la lógica principal
+                                de tu seguidor.</li>
+                            <li><strong>digitalRead(pin)</strong>: Lee si un sensor está sobre la línea (retorna 0) o
+                                fuera de ella (retorna 1).</li>
+                            <li><strong>analogWrite(pin, valor)</strong>: Cambia la velocidad de los motores usando PWM
+                                (0 para detener, 255 para máxima velocidad).</li>
+                        </ul>
+
+                        <h4>¿Cómo escribir tu lógica de control?</h4>
+                        <p>Puedes usar estructuras de control como <b>if</b>, <b>else if</b>, operadores como <b>==</b>
+                            (igualdad), <b>=</b> (asignación), <b>&gt;</b>, <b>&lt;</b>, <b>&amp;&amp;</b> (y
+                            lógico), <b>||</b> (o lógico) para tomar decisiones. Ejemplo básico:</p>
+                        <pre
+                            style="background:#ffffff; border:1px solid #ddd; border-radius:6px; padding:0.5em; margin: 1em 0;">if (digitalRead(2) == 0) {
+// Si el sensor Izquierdo (2) ve la línea, gira a la izquierda
+analogWrite(9, 0);    // Frena motor Izquierdo (9)
+analogWrite(10, 100); // Avanza motor Derecho (10)
+}</pre>
+                        <p>Recuerda declarar todas tus variables con tipos de dato de C++ (<code>int</code>,
+                            <code>float</code>, etc.) en lugar de <code>let</code>.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="code-explanation"
+                    style="background-color: #fff9e6; padding: 1.5em; border-radius: 8px; border: 1px solid #ffeeba; position: sticky; top: 1rem; margin-top: 2.2em;">
+                    <!-- Las explicaciones inyectadas por Monaco-Setup irán aquí -->
+                </div>
+            </div>
+        </div>
+        </div>
+
+        <!-- Guia Tab -->
+        <div id="guia" class="tab-content font-sans text-gray-800 antialiased leading-relaxed">
+            <div class="h-full overflow-y-auto">
+
+                <main class="w-full mx-auto px-4 py-8 md:py-12 space-y-4 max-w-none md:px-8">
+                    
+                    <details>
+                        <summary>Programación y Lógica</summary>
+                                                <div class="details-content space-y-12">
+                            <section class="glass-card p-6 md:p-10 text-lg">
+                                <h1 class="text-3xl font-bold text-brand-dark mb-4 mt-2">Guía de Programación: El Cerebro de nuestro Seguidor de Línea</h1>
+                                <p class="mb-4 text-gray-700">¡Bienvenidos, equipo del SVP Steam Club! Hoy en el laboratorio Padre Brilla Brilla vamos a dar un paso gigante. Vamos a programar el "cerebro" de nuestro robot seguidor de línea.</p>
+                                <p class="mb-4 text-gray-700">Para mantener nuestro nivel de campeones, no basta con copiar un código; necesitamos entender exactamente qué hace cada línea. Además, hoy tenemos una gran ventaja: podemos probar todo en nuestros robots físicos o usar el Simulador de Seguidor de Líneas. ¡Vamos a construir este programa paso a paso!</p>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-blue text-white font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 1</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">Configurando los Sentidos y los Músculos (Setup)</h2>
+                                <p class="mb-4 text-gray-700">Antes de que el robot pueda moverse o tomar decisiones, necesitamos decirle qué pines de la placa están conectados a sus motores (salidas) y cuáles a sus sensores (entradas).</p>
+                                <p class="mb-4 text-gray-700">Abran el IDE de Arduino o vayan a la pestaña Editor de Código de su simulador (pueden apoyarse en la Guía de Configuración que aparece a la derecha de la pantalla). Escriban esto:</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-paso1', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-paso1" class="language-cpp">void setup() {
+  // Estos son los "músculos" (Motores)
+  pinMode(5, OUTPUT);
+  pinMode(6, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+  
+  // Estos son los "sentidos" (Sensores infrarrojos)
+  pinMode(2, INPUT); // Sensor Izquierdo
+  pinMode(3, INPUT); // Sensor Central
+  pinMode(4, INPUT); // Sensor Derecho
+
+  // Iniciamos la comunicación para ver qué piensa el robot en la pantalla
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Por ahora, lo dejamos vacío.
+}</code></pre>
+                                </div>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-blue text-white font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 2</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">¡A mover los motores!</h2>
+                                
+                                <div class="mb-8 mt-6">
+                                    <h3 class="text-xl font-bold text-brand-dark mb-4 flex items-center gap-2">
+                                        <i data-lucide="zap" class="w-6 h-6 text-green-500"></i> 1. El Secreto de los Motores: La Analogía de la Batería
+                                    </h3>
+                                    
+                                    <p class="mb-4 text-gray-700">Imagina que cada motor de tu robot es un motorcito normal con <strong>dos cables sueltos</strong>.</p>
+                                    
+                                    <div class="flex flex-col md:flex-row gap-6 mb-6">
+                                        <div class="flex-1 space-y-3 text-gray-700">
+                                            <p class="flex items-start gap-2">
+                                                <i data-lucide="arrow-right-circle" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0"></i>
+                                                <span>Si conectas un cable al <strong>Positivo (+)</strong> y otro al <strong>Negativo (-)</strong>, el motor gira hacia adelante.</span>
+                                            </p>
+                                            <p class="flex items-start gap-2">
+                                                <i data-lucide="refresh-cw" class="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0"></i>
+                                                <span>Si <strong>inviertes los cables</strong> en la batería, el motor gira hacia atrás.</span>
+                                            </p>
+                                            <div class="bg-blue-50 text-blue-800 p-3 rounded-lg mt-4">
+                                                En nuestro Arduino, los pines son como esos cables de la batería.
+                                            </div>
+                                        </div>
+                                        <div class="flex-1 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-4 flex flex-col justify-center text-center text-brand-dark font-medium">
+                                            <p>Motor Izquierdo: Pines 5 y 6</p>
+                                            <p>Motor Derecho: Pines 9 y 10</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-[#1e2330] rounded-xl p-6 text-gray-300 shadow-lg">
+                                        <h4 class="text-white font-bold text-lg mb-4 flex items-center gap-2">
+                                            <span class="text-yellow-500 font-mono text-xl">&lt;&gt;</span> ¿Cómo le damos energía en código?
+                                        </h4>
+                                        <p class="mb-4 text-sm">Usamos la instrucción <code class="bg-[#2a3040] text-yellow-300 px-2 py-1 rounded font-mono">analogWrite(pin, velocidad)</code>.</p>
+                                        <ul class="list-disc pl-6 space-y-2 mb-6 text-sm">
+                                            <li><code class="bg-[#2a3040] px-1.5 py-0.5 rounded text-white font-mono">0</code> significa conectarlo al <strong>Negativo (-)</strong>.</li>
+                                            <li>Un número como <code class="bg-[#2a3040] px-1.5 py-0.5 rounded text-white font-mono">180</code> significa conectarlo al <strong>Positivo (+)</strong>. (0 a 255 máximo).</li>
+                                        </ul>
+                                        
+                                        <div class="bg-[#2a3040] border-l-4 border-yellow-500 p-4 rounded-r-lg">
+                                            <p class="text-sm mb-2"><strong class="text-white">Ejemplo para avanzar (Motor Izquierdo):</strong> Le damos energía al pin 5 y conectamos el 6 a tierra.</p>
+                                            <code class="text-green-400 font-mono text-sm">analogWrite(5, 180); analogWrite(6, 0);</code>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p class="mb-4 text-gray-700">Por ahora no usaremos los sensores. Vamos a enviar energía directamente a los motores usando la instrucción <code>analogWrite</code>. Coloquen este código dentro del <code>loop()</code>:</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-paso2', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-paso2" class="language-cpp">void loop() {
+  // Rueda izquierda hacia adelante
+  analogWrite(5, 100); 
+  analogWrite(6, 0);
+  
+  // Rueda derecha hacia adelante
+  analogWrite(9, 100); 
+  analogWrite(10, 0);
+}</code></pre>
+                                </div>
+                                <div class="bg-yellow-50 border-l-4 border-brand-accent p-4 mt-4 text-gray-700">
+                                    <strong>¡Reto para ustedes!</strong> Carguen el código en el robot físico, o hagan clic en el botón verde <em>Cargar Código en Simulador</em> y vayan a la pestaña Simulación. Luego, cambien los números <code>100</code> por otros valores (como 0, 50 o 255). ¿Qué hace el robot si le ponen 200 a un lado y 0 al otro? Fíjense muy bien hacia qué lado gira.
+                                </div>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-blue text-white font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 3</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">Leyendo la pista</h2>
+                                <p class="mb-4 text-gray-700">Borren el código de los motores que acaban de usar. Ahora queremos ver el mundo a través de los sensores del robot.</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-paso3', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-paso3" class="language-cpp">void loop() {
+  // Leemos y mostramos el valor de cada sensor (0 o 1)
+  Serial.print("Izq: ");
+  Serial.print(digitalRead(2));
+  Serial.print(" | Centro: ");
+  Serial.print(digitalRead(3));
+  Serial.print(" | Der: ");
+  Serial.println(digitalRead(4));
+  
+  delay(100); 
+}</code></pre>
+                                </div>
+                                <div class="bg-blue-50 border-l-4 border-brand-blue p-4 mt-4 text-gray-700">
+                                    <strong>¡A experimentar!</strong> Suban este código. Si están en físico, abran el Monitor Serie (la lupa arriba a la derecha en Arduino) y muevan el robot con las manos sobre la línea negra. Si están en el simulador, corran la simulación y observen cómo reaccionan los sensores al pasar sobre la pista. ¿Cuándo marca 0 y cuándo marca 1?
+                                </div>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-blue text-white font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 4</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">La primera decisión (if)</h2>
+                                <p class="mb-4 text-gray-700">Ya sabemos movernos y sabemos leer la línea. ¡Vamos a unirlo! Introducimos la condición <code>if</code> (que en inglés significa "Si pasa esto...").</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-paso4', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-paso4" class="language-cpp">void loop() {
+  // SI el sensor central ve la línea negra...
+  if (digitalRead(3)) {
+    // ...entonces avanzamos (usamos el código del Paso 2)
+    analogWrite(5, 100); analogWrite(6, 0);
+    analogWrite(9, 100); analogWrite(10, 0);
+  }
+}</code></pre>
+                                </div>
+                                <p class="mt-4 text-gray-700">Pruébenlo en la pista real o en la pestaña Simulación. El robot debería avanzar solo si el sensor del medio está sobre la línea.</p>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-blue text-white font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 5</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">Corrigiendo el rumbo (else if)</h2>
+                                <p class="mb-4 text-gray-700">¿Qué pasa si la pista hace una curva? Necesitamos decirle al robot qué hacer con los otros dos sensores.</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-paso5', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-paso5" class="language-cpp">void loop() {
+  if (digitalRead(3)) {
+    // Avanzar
+    analogWrite(5, 100); analogWrite(6, 0);
+    analogWrite(9, 100); analogWrite(10, 0);
+  }
+  else if (digitalRead(2)) {
+    // Corregir hacia la izquierda
+    analogWrite(5, 0); analogWrite(6, 80);
+    analogWrite(9, 100); analogWrite(10, 0);
+  }
+  else if (digitalRead(4)) {
+    // Corregir hacia la derecha
+    analogWrite(5, 100); analogWrite(6, 0);
+    analogWrite(9, 0); analogWrite(10, 80);
+  }
+}</code></pre>
+                                </div>
+                                <div class="bg-blue-50 border-l-4 border-brand-blue p-4 mt-4 text-gray-700">
+                                    <strong>Atención aquí (if vs else if):</strong> Si usamos puros <code>if</code>, el robot leería todas las instrucciones de golpe y se confundiría intentando ir a todos lados a la vez. Al usar <code>else if</code> (que significa "si no pasó lo anterior, entonces prueba esto"), le decimos al robot: "En cuanto encuentres qué hacer, ejecuta esa orden e ignora el resto". ¡Es mucho más eficiente!
+                                </div>
+                            </section>
+
+                            <section class="bg-gradient-to-br from-green-600 to-green-800 text-white p-8 rounded-2xl shadow-xl text-center">
+                                <i data-lucide="award" class="w-12 h-12 text-yellow-300 mx-auto mb-4"></i>
+                                <h2 class="text-3xl font-bold mb-4">🏆 ¡FELICIDADES! ¡Tienen un robot funcional!</h2>
+                                <p class="text-gray-100 max-w-2xl mx-auto mb-4">
+                                    Si llegaron hasta aquí y probaron este código en el robot real o en la pestaña de Simulación, ya lograron el objetivo principal: tienen un robot seguidor de líneas funcional. Hace lo básico y necesario: avanza, corrige a la izquierda y corrige a la derecha.
+                                </p>
+                                <p class="text-gray-100 max-w-2xl mx-auto">
+                                    Todo lo que vamos a hacer a partir del siguiente paso no es para que "funcione", sino para mejorarlo. Vamos a optimizar su código para que sea un robot de competencia: más rápido, con movimientos más suaves y capaz de no perderse en la pista. ¡Vamos al siguiente nivel!
+                                </p>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-accent text-brand-dark font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 6</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">Variables (Trabajando de forma inteligente)</h2>
+                                <p class="mb-4 text-gray-700">Si queremos ajustar el ritmo del robot en el simulador o en la pista para hacerlo más rápido, cambiar todos esos "100" y "80" uno por uno nos va a quitar mucho tiempo. Es mejor crear unas "cajas" para guardar esos números al principio del código, antes del <code>setup()</code>. A estas cajas las llamamos variables.</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-paso6', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-paso6" class="language-cpp">int vel = 230;     // Velocidad para avanzar
+int velinv = 80;   // Velocidad para corregir/girar
+
+// Ahora en su loop, en vez de números, escriben el nombre de la variable:
+void loop() {
+  if (digitalRead(3)) {
+    analogWrite(5, vel); analogWrite(6, 0);
+    // ...</code></pre>
+                                </div>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-accent text-brand-dark font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 7</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">Movimientos más suaves (&&)</h2>
+                                <p class="mb-4 text-gray-700">Si solo leemos un sensor a la vez, el robot va a temblar mucho. ¿Qué pasa si la línea está justo entre el sensor central y el izquierdo? Usamos el símbolo <code>&&</code> (que significa "Y") para leer dos cosas al mismo tiempo.</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-paso7', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-paso7" class="language-cpp">  // Si el central Y el izquierdo ven la línea a la vez...
+  if (digitalRead(3) && digitalRead(2)) {
+    // Hacemos un giro suave
+    analogWrite(5, 40); analogWrite(6, 0); 
+    analogWrite(9, vel); analogWrite(10, 0); 
+  }</code></pre>
+                                </div>
+                                <p class="mt-4 text-gray-700">Vayan a la pestaña Simulación y noten cómo esto nos da mucha más precisión en las curvas.</p>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-accent text-brand-dark font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 8</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">El diseño también importa (Editor de Robot)</h2>
+                                <p class="mb-4 text-gray-700">El código no lo es todo; la forma física de nuestro robot afecta directamente cómo funciona nuestra programación. Vayan a la pestaña Editor de Robot en el simulador y fíjense en estas dos medidas clave de la geometría:</p>
+                                <ul class="list-disc pl-6 space-y-4 mb-4 text-gray-700">
+                                    <li><strong>Separación Sensores Laterales (mm):</strong> ¿Qué pasa si los separamos mucho? La línea negra podría quedar atrapada en el medio de los sensores sin que ninguno la toque, y el robot pensará que se perdió. ¿Y si los juntamos demasiado? Los sensores se activarán al mismo tiempo constantemente y el robot temblará mucho en las rectas.</li>
+                                    <li><strong>Offset Sensores Delante (mm):</strong> Es la distancia desde las ruedas hasta la punta donde están los sensores. Funciona como una palanca. Si los sensores están muy lejos hacia adelante, el robot detectará la curva con mucha anticipación, pero al girar, la "trompa" del robot hará un barrido muy amplio.</li>
+                                </ul>
+                                <div class="bg-yellow-50 border-l-4 border-brand-accent p-4 text-gray-700">
+                                    <strong>¡Reto!</strong> Modifiquen estos valores en el simulador y prueben la pista. Verán que el mismo código reacciona de forma totalmente diferente si cambiamos el cuerpo del robot. ¡Encuentren el equilibrio perfecto!
+                                </div>
+                            </section>
+
+                            <section class="glass-card p-6 md:p-10 relative overflow-hidden">
+                                <span class="absolute top-0 right-0 bg-brand-accent text-brand-dark font-bold py-1 px-4 rounded-bl-lg text-sm">Paso 9</span>
+                                <h2 class="text-2xl font-bold text-brand-dark mb-4 mt-2">Dándole "Memoria" al robot</h2>
+                                <p class="mb-4 text-gray-700">¿Qué pasa si el robot va muy rápido en una curva y los 3 sensores se salen de la línea negra? ¡Se quedaría ciego y quieto!</p>
+                                <p class="mb-4 text-gray-700">Para solucionar esto, crearemos otra variable al principio llamada <code>ultimoDir</code>. Esta variable será la memoria del robot. Le enseñaremos a recordar: ¿Hacia dónde fue mi último giro?</p>
+                                <ul class="list-none pl-6 space-y-2 mb-4 text-gray-700 font-mono bg-gray-100 p-4 rounded inline-block">
+                                    <li>1 = Izquierda</li>
+                                    <li>2 = Centro</li>
+                                    <li>3 = Derecha</li>
+                                </ul>
+                                <p class="mb-6 text-gray-700">Si el robot se sale por completo de la línea (digitalRead de los tres sensores es 0), usaremos esa memoria (<code>ultimoDir</code>) para decirle: "Sigue girando fuerte hacia el lado que memorizaste hasta que vuelvas a encontrar la línea".</p>
+
+                                <h3 class="text-xl font-bold text-brand-dark mb-4 border-t pt-6">El Código Final</h3>
+                                <p class="mb-4 text-gray-700">Uniendo todos los pasos, la lógica de los sensores combinados y la memoria para cuando perdemos la línea, este es el código maestro. Péguenlo en el Editor de Código del simulador, verifiquen su geometría en el Editor de Robot, y ¡a correr en la pista virtual y real!</p>
+                                
+                                <div class="relative group">
+                                    <div class="absolute top-2 right-2 flex gap-2 z-10">
+                                        <button onclick="copyCode('code-final', this)" class="copy-btn bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                                        </button>
+                                    </div>
+                                    <pre><code id="code-final" class="language-cpp">int vel = 230;
+int velinv = 80;
+
+int ultimoDir = 2; //1 izquierda, 2 centro, 3 derecha
+
+void setup() {
+
+  pinMode(5, OUTPUT);
+  pinMode(6, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(2, INPUT);
+  pinMode(3, INPUT);
+  pinMode(4, INPUT);
+
+  Serial.begin(9600);
+}
+
+void loop() {
+
+if (digitalRead(3) && digitalRead(4)) {
+analogWrite(5, vel); analogWrite(6, 0);
+analogWrite(9, 40); analogWrite(10, 0);
+ultimoDir = 3;
+}
+
+else if (digitalRead(3) && digitalRead(2)) {
+analogWrite(5, 40); analogWrite(6, 0);
+analogWrite(9, vel); analogWrite(10, 0);
+ultimoDir = 1;
+}
+
+else if (digitalRead(4)) {
+analogWrite(5, vel); analogWrite(6, 0);
+analogWrite(9, 0); analogWrite(10, velinv);
+ultimoDir = 3;
+}
+
+else if (digitalRead(2)) {
+analogWrite(5, 0); analogWrite(6, velinv);
+analogWrite(9, vel); analogWrite(10, 0);
+ultimoDir = 1;
+}
+
+else if (digitalRead(3)) {
+analogWrite(5, vel); analogWrite(6, 0);
+analogWrite(9, vel); analogWrite(10, 0);
+ultimoDir = 2;
+}
+
+else if ((digitalRead(2)==0 && digitalRead(3)==0 && digitalRead(4)==0) && ultimoDir == 1) {
+analogWrite(5, 0); analogWrite(6, velinv);
+analogWrite(9, vel); analogWrite(10, 0);
+}
+
+else if ((digitalRead(2)==0 && digitalRead(3)==0 && digitalRead(4)==0) && ultimoDir == 3) {
+analogWrite(5, vel); analogWrite(6, 0);
+analogWrite(9, 0); analogWrite(10, velinv);
+}
+
+// Variables preventivas por si usan lógica inversa (1 es linea)
+else if ((digitalRead(2)==1 && digitalRead(3)==1 && digitalRead(4)==1) && ultimoDir == 1) {
+analogWrite(5, vel); analogWrite(6, 0);
+analogWrite(9, vel); analogWrite(10, 0);
+}
+
+else if ((digitalRead(2)==1 && digitalRead(3)==1 && digitalRead(4)==1) && ultimoDir == 3) {
+analogWrite(5, vel); analogWrite(6, 0);
+analogWrite(9, vel); analogWrite(10, 0);
+}
+delay(5);
+}</code></pre>
+                                </div>
+                            </section>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Usando el Editor de Robot</summary>
+                        <div class="details-content space-y-6 text-gray-700">
+                            <h3 class="text-2xl font-bold text-brand-dark mb-4">Paso 1: Configurar la Geometría Base</h3>
+                            <p>Ve a la pestaña <strong>Editor de Robot</strong>. En el panel derecho (<strong>Geometría del Robot</strong>), ajustamos el "esqueleto":</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Número de Sensores IR:</strong> Cámbialo al número de sensores físicos que tengas (ej. 3). Verás aparecer puntos rojos en la vista previa.</li>
+                                <li><strong>Ancho del Robot (Wheelbase):</strong> Es la distancia entre los centros de las dos ruedas motrices. Un valor real ayuda a que los giros en el simulador sean idénticos a los reales.</li>
+                                <li><strong>Separación de Sensores:</strong> Ajusta la distancia entre los sensores para que coincidan con la anchura de la línea que vas a seguir.</li>
+                                <li><strong>Offset de Sensores:</strong> Define qué tan adelante del eje de las ruedas están tus sensores.</li>
+                            </ul>
+
+                            <h3 class="text-2xl font-bold text-brand-dark mb-4">Paso 2: Configurar las Conexiones (Pines)</h3>
+                            <p>Baja hasta la sección <strong>Conexiones (Pines Arduino)</strong>. Los campos cambian según lo que elijas:</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Pines de Sensores:</strong> Asigna cada sensor al pin digital de tu Arduino.</li>
+                                <li><strong>Tipo de Controlador (Driver):</strong> 
+                                    <ul class="list-circle pl-6 mt-2">
+                                        <li><strong>L298N (Clásico):</strong> Usa pines de habilitación (ENA/ENB) para PWM y 4 pines de dirección (IN1-IN4).</li>
+                                        <li><strong>MX1616:</strong> Usa solo 4 pines directamente con PWM.</li>
+                                        <li><strong>ESC/Single:</strong> Para motores que solo requieren una señal PWM por lado.</li>
+                                    </ul>
+                                </li>
+                            </ul>
+
+                            <h3 class="text-2xl font-bold text-brand-dark mb-4">Paso 3: Añadir Partes Decorativas (Electrónica)</h3>
+                            <p>Usa la <strong>Paleta de Partes</strong> (extremo derecho) para que tu robot luzca real:</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Arrastrar y Soltar:</strong> Haz clic y arrastra el <em>Arduino Uno</em>, el <em>L298N</em>, la <em>Batería</em> o los <em>Motores</em> sobre el chasis.</li>
+                                <li><strong>Organización:</strong> Ubica los componentes donde realmente los pegaste en tu robot.</li>
+                                <li><strong>Modo Borrar:</strong> Si colocas algo mal, activa el botón rojo <strong>Modo Borrar</strong> y haz clic sobre la pieza para eliminarla.</li>
+                            </ul>
+
+                            <h3 class="text-2xl font-bold text-brand-dark mb-4">Paso 4: Ruedas y Cuerpos Custom (Avanzado)</h3>
+                            <p>Si tu robot no es rectangular o tiene ruedas especiales, usa las herramientas de la parte inferior:</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Cuerpos Custom:</strong> Haz clic en <strong>Añadir Cuerpo Custom</strong>. Puedes elegir la forma, el tamaño y el color. Usa el <strong>Offset</strong> para mover el chasis.</li>
+                                <li><strong>Ruedas Custom:</strong> Ajusta el <strong>Diámetro</strong> y <strong>Ancho</strong> de tus llantas.</li>
+                            </ul>
+
+                            <h3 class="text-2xl font-bold text-brand-dark mb-4">Paso 5: Física y Dinámica</h3>
+                            <p>En la pestaña de <strong>Simulación</strong>, puedes ajustar parámetros que afectan el comportamiento real:</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Masa y Centro de Masa (CdM):</strong> Observa la "Diana" (blanco y negro) en el editor. Representa el equilibrio. Un CdM muy adelantado hará que el robot gire con dificultad; muy atrasado lo hará inestable.</li>
+                                <li><strong>Agarre de Neumáticos (Tire Grip):</strong> Ajusta qué tanto "derrapa" tu robot en las curvas cerradas.</li>
+                            </ul>
+
+                            <h3 class="text-2xl font-bold text-brand-dark mb-4">Paso 6: Guardar y Cargar al Simulador</h3>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Exportar:</strong> Cuando estés satisfecho, haz clic en el botón verde <strong>CARGAR DISEÑO EN SIMULADOR</strong>.</li>
+                                <li><strong>Guardar Archivo:</strong> Usa el botón <strong>Guardar Robot</strong> para descargar un archivo <code>.json</code>. Podrás recuperarlo con <strong>Cargar Robot</strong>.</li>
+                            </ul>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Usando el Editor de Código</summary>
+                        <div class="details-content space-y-6 text-gray-700">
+                            <p>El Editor de Código te permite programar la lógica del robot utilizando sintaxis de C++ (similar a Arduino).</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Estructura Base:</strong> Todo código necesita una función <code>setup()</code> que se ejecuta una vez, y una función <code>loop()</code> que se repite continuamente.</li>
+                                <li><strong>Lectura de Sensores:</strong> Usa <code>digitalRead(pin)</code>. Retorna <code>HIGH</code> (1) si está fuera de la línea, o velo como convenga tu lógica de sensores. Ajusta tu lógica sabiendo que los pines cambian según el diseño del Robot Editor.</li>
+                                <li><strong>Control de Motores:</strong> Usa <code>analogWrite(pin, velocidad)</code> para controlar velocidad (PWM entre 0 y 255).</li>
+                                <li><strong>Variables C++:</strong> Puedes declarar variables como <code>int</code>, <code>float</code>, o <code>bool</code> de forma normal.</li>
+                            </ul>
+                            <div class="bg-blue-50 border-l-4 border-brand-blue p-4 text-gray-700">
+                                <strong>💡 Recuerda:</strong> Siempre que hagas un cambio, presiona el botón <span class="bg-green-500 text-white px-2 py-1 rounded text-sm font-bold">CARGAR CÓDIGO EN SIMULADOR</span> para aplicar tus cambios en la memoria virtual.
+                            </div>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Usando el Editor de Pista</summary>
+                        <div class="details-content space-y-6 text-gray-700">
+                            <p>El Editor de Pista te permite crear circuitos personalizados basados en un sistema de cuadrícula.</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Selección de Tramos:</strong> A la izquierda tienes diferentes tipos de curvas y rectas. Haz clic en una y luego colócala en el lienzo cuadriculado.</li>
+                                <li><strong>Pista Aleatoria:</strong> Si no quieres construirla, haz clic en el botón de pista aleatoria para autogenerar un circuito cerrado.</li>
+                                <li><strong>Rotación:</strong> Algunas piezas pueden requerir rotación para encajar bien, dependiendo de la interfaz puedes girar antes de colocar.</li>
+                                <li><strong>Guardar y Restarurar:</strong> Usa los botones en la parte superior para descargar tu pista creada como un archivo, ¡para compartir con amigos!</li>
+                            </ul>
+                            <p>Cuando la pista esté completa y sin finales abiertos, haz clic en el botón de aplicar a simulación para correr en ella.</p>
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Usando la Simulación</summary>
+                        <div class="details-content space-y-6 text-gray-700">
+                            <p>Aquí es donde la inteligencia de tu código y el diseño físico del robot convergen en la pista.</p>
+                            <ul class="list-disc pl-6 space-y-2 mb-4">
+                                <li><strong>Colocar la Línea de Salida:</strong> Haz clic en "Ubicar Línea de Comienzo" y enseguida haz clic en cualquier tramo recto de la pista para establecer tu línea de meta/cronometraje.</li>
+                                <li><strong>Iniciar / Detener:</strong> Usa los botones para correr o pausar el robot en el simulador.</li>
+                                <li><strong>Parámetros Avanzados:</strong> En la barra lateral puedes manipular el ruido de sensor, la eficiencia de los motores, el paso de tiempo de simulación y variables térmicas o físicas complejas (Para usuarios nivel experto).</li>
+                                <li><strong>Cronómetro:</strong> El panel mostrará automáticamente el tiempo de tu mejor vuelta y los tiempos parciales mientras el robot cruza la línea de meta que ubicaste.</li>
+                                <li><strong>Telemetría Visual:</strong> Mira la salida del Monitor Serial para leer datos con <code>Serial.print()</code> si estás haciendo <em>debug</em> de tu algoritmo de control.</li>
+                            </ul>
+                        </div>
+                    </details>
+
+                </main>
+                <footer class="text-center text-gray-500 py-8 text-sm">
+                    <p>Creado para el Club de Robótica SVP Steam Club</p>
+                </footer>
+            </div>
+        </div>
+
+        <!-- Robot Editor Tab -->
+        <div id="robot-editor" class="tab-content">
+            <div class="robot-editor-layout">
+                <div class="robot-preview">
+                    <div class="preview-header">
+                        <h3>Vista Previa del Robot</h3>
+                        <div class="preview-controls">
+                            <button id="editorPanBtn" title="Activar/Desactivar Paneo"
+                                style="margin-right: 0.5em; cursor: pointer;">✋</button>
+                            <button id="editorZoomInBtn" title="Acercar">+</button>
+                            <button id="editorZoomOutBtn" title="Alejar">−</button>
+                            <button id="editorZoomResetBtn" title="Resetear Zoom (1:1)">1:1</button>
+                            <button id="editorZoomExtentsBtn" title="Ajustar Vista">🔍</button>
+                        </div>
+                    </div>
+                    <div class="preview-canvas-container">
+                        <canvas id="robotPreviewCanvas" width="500" height="450"></canvas>
+                    </div>
+                    <div class="robot-parts-palette">
+                        <h4>Partes Decorativas</h4>
+                        <div style="display: flex; gap: 0.5em; margin-bottom: 0.5em;">
+                            <button id="addCustomWheelsBtn" style="flex:1; padding: 0.4em; font-size:0.9em;">+ Ruedas
+                                Custom</button>
+                            <button id="addCustomBodyBtn" style="flex:1; padding: 0.4em; font-size:0.9em;">+ Cuerpo
+                                Custom</button>
+                        </div>
+                        <div id="robotPartsPalette">
+                            <!-- Parts will be loaded here by JS -->
+                        </div>
+
+                        <!-- Modal for Parametric Parts -->
+                        <dialog id="customPartDialog"
+                            style="border: 1px solid #ccc; border-radius: 8px; padding: 1.5em; background: #ffffff; color: #333333; max-width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; z-index: 1000;">
+                            <form method="dialog" id="customPartForm">
+                                <h4 id="customPartTitle" style="margin-top: 0; margin-bottom: 1em;">Añadir Pieza Custom
+                                </h4>
+                                <input type="hidden" id="customPartType" value="">
+
+                                <label style="display:block; margin-bottom: 0.5em;">
+                                    Largo (Y) (mm):
+                                    <input type="number" id="customPartLength" min="5" max="300" required
+                                        style="width:100%; box-sizing:border-box; margin-top:0.2em;">
+                                </label>
+                                <label style="display:block; margin-bottom: 0.5em;" id="customPartWidthContainer">
+                                    Ancho (X) (mm):
+                                    <input type="number" id="customPartWidth" min="2" max="300" required
+                                        style="width:100%; box-sizing:border-box; margin-top:0.2em;">
+                                </label>
+                                <label style="display:block; margin-bottom: 0.5em;" id="customPartOffsetContainer">
+                                    Desfase Y del Centro (mm):
+                                    <input type="number" id="customPartOffset" value="0" min="-150" max="150"
+                                        style="width:100%; box-sizing:border-box; margin-top:0.2em;">
+                                </label>
+                                <label style="display:block; margin-bottom: 1em;">
+                                    Color:
+                                    <input type="color" id="customPartColor" value="#ff0000"
+                                        style="width:100%; height: 35px; box-sizing:border-box; cursor:pointer; margin-top:0.2em;">
+                                </label>
+
+                                <div style="display: flex; justify-content: flex-end; gap: 0.5em;">
+                                    <button type="button" id="cancelCustomPart"
+                                        style="background:#ddd; color:#333; border:none; padding: 0.5em 1em; border-radius: 4px; cursor: pointer;">Cancelar</button>
+                                    <button type="submit" id="confirmCustomPart"
+                                        style="background:var(--primary-color); color:white; border:none; padding: 0.5em 1em; border-radius: 4px; cursor: pointer;">Añadir</button>
+                                </div>
+                            </form>
+                        </dialog>
+                    </div>
+                    <div class="robot-editor-help"
+                        style="margin-top:1em; font-size:0.95em; color:#234e70; background:#f8f9fa; border-radius:8px; padding:0.8em 1em;">
+                        <strong>¿Cómo usar el editor de robot?</strong><br>
+                        <ul style="margin:0.5em 0 0 1.2em; padding:0;">
+                            <li>Haz <b>click</b> en una pieza y luego <b>arrástrala</b> al robot para ubicarla.</li>
+                            <li><b>Click y arrastrar</b> sobre una pieza ya colocada para moverla.</li>
+                            <li><b>Doble click</b> sobre una pieza para rotarla.</li>
+                            <li>Activa <b>Modo Borrar</b> y haz <b>doble click</b> en una pieza para eliminarla.</li>
+                            <li>Haz click en <b>Aplicar Geometría y Reiniciar Sim</b> para cargar el robot en el
+                                simulador.</li>
+                            <li>Usa <b>Guardar Robot</b> para descargar tu diseño y <b>Cargar Robot</b> para
+                                restaurarlo.</li>
+                            <li>Puedes cargar un robot prearmado desde la lista desplegable.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="robot-parameters">
+                    <h3>Geometría del Robot (en milimetros)</h3>
+                    <label for="robotWidth">
+                        Ancho (dist. ruedas) (mm):
+                        <input type="number" id="robotWidth" value="100" step="1" min="20">
+                    </label>
+
+                    <label for="sensorOffset">
+                        Offset Sensores Delante (mm):
+                        <input type="number" id="sensorOffset" value="50" step="1" min="0">
+                    </label>
+
+                    <label for="sensorSpread">
+                        Separación Sensores Laterales (mm):
+                        <input type="number" id="sensorSpread" value="30" step="1" min="0">
+                    </label>
+
+                    <label for="sensorDiameter">
+                        Diámetro de Detección (mm):
+                        <input type="number" id="sensorDiameter" value="5" step="0.5" min="1">
+                    </label>
+
+                    <label for="sensorCount">
+                        Número de Sensores IR:
+                        <select id="sensorCount">
+                            <option value="1">1</option>
+                            <option value="2" selected>2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                            <option value="7">7</option>
+                            <option value="8">8</option>
+                        </select>
+                    </label>
+
+                    <div style="margin-top: 10px;">
+                        <button id="addCustomSensorBtn" style="width: 100%; padding: 0.4em; font-size:0.9em;">+ Agregar
+                            Sensor Custom</button>
+                        <div id="customSensorsList" style="margin-top: 10px;"></div>
+                    </div>
+
+                    <h3 style="margin-top: 1em; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                        Conexiones (Pines Arduino)</h3>
+                    <div id="sensorConnectionsContainer">
+                        <!-- Sensors ordered from Left to Right -->
+                        <div class="pin-row sensor-pin-config" style="display:none;" id="rowSensorFullFarLeft">
+                            <span>Pin Sensor Muy Ext. Izq.:</span>
+                            <select id="pinSensorFullFarLeft">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="pin-row sensor-pin-config" style="display:none;" id="rowSensorFarLeft">
+                            <span>Pin Sensor Extremo Izq.:</span>
+                            <select id="pinSensorFarLeft">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="pin-row sensor-pin-config">
+                            <span>Pin Sensor Izquierdo:</span>
+                            <select id="pinSensorLeft">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="pin-row sensor-pin-config" id="rowSensorCenter">
+                            <span>Pin Sensor Centro:</span>
+                            <select id="pinSensorCenter">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="pin-row sensor-pin-config">
+                            <span>Pin Sensor Derecho:</span>
+                            <select id="pinSensorRight">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="pin-row sensor-pin-config" style="display:none;" id="rowSensorFarRight">
+                            <span>Pin Sensor Extremo Der.:</span>
+                            <select id="pinSensorFarRight">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="pin-row sensor-pin-config" style="display:none;" id="rowSensorFullFarRight">
+                            <span>Pin Sensor Muy Ext. Der.:</span>
+                            <select id="pinSensorFullFarRight">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        </div>
+                        <div class="pin-row sensor-pin-config" style="display:none;" id="rowSensorFullFarRight">
+                            <span>Pin Sensor Muy Ext. Der.:</span>
+                            <select id="pinSensorFullFarRight">
+                                <option value="" disabled selected>(sin seleccionar)</option>
+                                <option value="VCC">Puente a Positivo (VCC)</option>
+                                <option value="GND">Puente a Negativo (GND)</option>
+                                <optgroup label="⚡ Analógicos (A0–A5)">
+                                    <option value="A0">A0 — Analógico</option>
+                                    <option value="A1">A1 — Analógico</option>
+                                    <option value="A2">A2 — Analógico</option>
+                                    <option value="A3">A3 — Analógico</option>
+                                    <option value="A4">A4 — Analógico / I2C SDA</option>
+                                    <option value="A5">A5 — Analógico / I2C SCL</option>
+                                </optgroup>
+                                <optgroup label="🔵 Digitales (D2–D13)">
+                                    <option value="2">2 — Digital</option>
+                                    <option value="3">3 — Digital / PWM~</option>
+                                    <option value="4">4 — Digital</option>
+                                    <option value="5">5 — Digital / PWM~</option>
+                                    <option value="6">6 — Digital / PWM~</option>
+                                    <option value="7">7 — Digital</option>
+                                    <option value="8">8 — Digital</option>
+                                    <option value="9">9 — Digital / PWM~</option>
+                                    <option value="10">10 — Digital / PWM~ / SS</option>
+                                    <option value="11">11 — Digital / PWM~ / MOSI</option>
+                                    <option value="12">12 — Digital / MISO</option>
+                                    <option value="13">13 — Digital / LED / SCK</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <label for="motorDriverType" style="margin-top:0.8em; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                            Tipo de Controlador de Motores:
+                            <select id="motorDriverType">
+                                <option value="l298n" selected>L298N / L293D (6 pines: ENA, IN1, IN2, IN3, IN4, ENB)</option>
+                                <option value="mx1616">MX1616 / TB6612 (4 pines: IN1, IN2, IN3, IN4)</option>
+                                <option value="single">ESCs (2 pines: 1 PWM por motor)</option>
+                            </select>
+                        </label>
+
+                        <div id="motorConnectionsContainer" style="padding-left:1em; border-left: 2px solid var(--primary-color);">
+                            <!-- Generado dinámicamente según motorDriverType -->
+                        </div>
+
+                        <h3 style="margin-top: 1em; border-top: 1px solid var(--border-color); padding-top: 10px;">Físicas del Robot</h3>
+                        <label for="robotMass" title="Masa del robot en kilogramos. Afecta inercia.">
+                            Masa (kg):
+                            <input type="number" id="robotMass" value="0.25" step="0.01" min="0.05" max="5.0">
+                        </label>
+
+                        <label for="comOffset" title="Centro de Gravedad. Negativo = peso atrás.">
+                            Desplazamiento CG (mm):
+                            <input type="number" id="comOffset" value="0.0" step="1" min="-100" max="100">
+                        </label>
+
+                        <label for="tireGrip" title="Coeficiente de Fricción. Mínimo = Derrapa mucho.">
+                            Adherencia Llanta (μ):
+                            <input type="number" id="tireGrip" value="0.8" step="0.1" min="0.1" max="5.0">
+                        </label>
+
+                        <button id="applyRobotGeometryButton" style="margin-top: 1em; background-color: #4CAF50; color: white; border: none; padding: 10px 20px; text-transform: uppercase; font-weight: bold; border-radius: 4px; cursor: pointer; width: 100%;">Cargar Diseño en Simulador
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Track Editor Tab -->
+        <div id="track-editor" class="tab-content">
+            <!-- Full viewport height approach -->
+            <div
+                style="display: flex; flex-direction: column; gap: 1em; height: calc(100vh - 140px); margin-top: -1em;">
+                <!-- Header: Controles y Paleta -->
+                <div style="display: flex; gap: 1em; align-items: stretch; flex-wrap: wrap;">
+
+                    <!-- Controles compactados -->
+                    <div
+                        style="flex: 1; min-width: 320px; background: var(--surface-color); padding: 0.8em; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; justify-content: space-between; gap: 0.5em;">
+                        <div style="display: flex; gap: 0.5em; align-items: center; flex-wrap: wrap;">
+                            <strong style="font-size: 0.9em; margin-right: 0.5em;">Controles:</strong>
+                            <label for="trackGridSize" style="font-size: 0.8em;">Grid:</label>
+                            <select id="trackGridSize" style="padding: 0.2em; font-size: 0.8em; width: auto;">
+                                <option value="3x3">3x3</option>
+                                <option value="4x4" selected>4x4</option>
+                                <option value="5x5">5x5</option>
+                            </select>
+                            <label for="trackModeDropdown" style="font-size: 0.8em; margin-left: 0.5em;">Cat:</label>
+                            <select id="trackModeDropdown" style="padding: 0.2em; font-size: 0.8em; width: auto;">
+                                <option value="aventura">Aventura</option>
+                                <option value="desafio">Desafío</option>
+                                <option value="innovacion">Innovación</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; gap: 0.3em; align-items: center; flex-wrap: wrap;">
+                            <button id="generateRandomTrack"
+                                style="flex:1; padding: 0.4em 0.5em; min-height: 0; font-size: 0.8em;">Aleatoria</button>
+                            <button id="exportTrackToSimulator"
+                                style="flex:1; padding: 0.4em 0.5em; min-height: 0; font-size: 0.8em; background-color: #4CAF50; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer;">Cargar Pista en Simulador</button>
+                            <button id="clearTrackButton" class="danger"
+                                style="flex:1; padding: 0.4em 0.5em; min-height: 0; margin-top:0; font-size: 0.8em;">Limpiar</button>
+                        </div>
+                        <div style="display: flex; gap: 0.3em; align-items: center;">
+                            <button id="saveTrackDesignButton"
+                                style="flex:1; padding: 0.4em 0.5em; min-height: 0; font-size: 0.8em;">Guardar</button>
+                            <label for="loadTrackDesignInput" class="file-input-label"
+                                style="flex:1; padding: 0.4em 0.5em; min-height: 0; margin:0; font-size: 0.8em; line-height: 1.2;">Cargar
+                                (.json)
+                                <input type="file" id="loadTrackDesignInput" accept=".json,.trackdesign"
+                                    style="display:none;">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Paleta de piezas scrollable (horizontal) -->
+                    <div
+                        style="flex: 2; min-width: 320px; background: var(--surface-color); padding: 0.8em; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                            <strong style="font-size: 0.9em;">Paleta de Piezas</strong>
+                            <span style="font-size: 0.7em; color: var(--text-secondary);">Click ubic., Doble-click
+                                rotar</span>
+                        </div>
+                        <div id="trackPartsPalette"
+                            style="display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 0.5em; padding-bottom: 0.5em; align-items: center;">
+                            <!-- Piezas se cargarán aquí por JS (deberíamos asegurarnos que JS no las empuje con display:grid in CSS) -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controles Grid (Canvas) Full Rest Height -->
+                <div class="track-editor-grid"
+                    style="flex: 1; min-height: 0; background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                    <canvas id="trackEditorCanvas"
+                        style="max-width: 100%; max-height: 100%; object-fit: contain; display: block;"></canvas>
+                    <!-- Size set by JS -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Simulador Avanzado de Seguidor de Línea - 2025. Ing. Luis Fernando Corado</p>
+    </footer>
+
+    <script type="module" src="js/main.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(function (registration) {
+                        console.log('ServiceWorker registrado con éxito:', registration.scope);
+                    }, function (err) {
+                        console.log('Error al registrar el ServiceWorker:', err);
+                    });
+            });
+        }
+
+        // Lógica Factor de Escala Global
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const scaleValue = document.getElementById('globalScaleValue');
+
+        let currentZoom = 1.0;
+        const zoomStep = 0.1;
+        const minZoom = 0.5;
+        const maxZoom = 1.5;
+
+        function updateZoom() {
+            const percentage = Math.round(currentZoom * 100);
+            scaleValue.textContent = percentage + '%';
+            document.body.style.zoom = currentZoom;
+        }
+
+        const fullScreenBtn = document.getElementById('fullScreenBtn');
+        if (fullScreenBtn) {
+            fullScreenBtn.addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen();
+                    }
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                }
+            });
+            document.addEventListener('fullscreenchange', () => {
+                fullScreenBtn.textContent = document.fullscreenElement ? '╬' : '⛶';
+                fullScreenBtn.title = document.fullscreenElement ? 'Salir de Pantalla Completa' : 'Pantalla Completa';
+            });
+        }
+
+        zoomOutBtn.addEventListener('click', () => {
+            if (currentZoom > minZoom) {
+                // Fix floating point math issues
+                currentZoom = Math.max(minZoom, Math.round((currentZoom - zoomStep) * 10) / 10);
+                updateZoom();
+            }
+        });
+
+        zoomInBtn.addEventListener('click', () => {
+            if (currentZoom < maxZoom) {
+                currentZoom = Math.min(maxZoom, Math.round((currentZoom + zoomStep) * 10) / 10);
+                updateZoom();
+            }
+        });
+
+        // Inicializar iconos de la Guía
+        lucide.createIcons();
+
+        // Función para copiar código de la Guía
+        function copyCode(elementId, button) {
+            const codeElement = document.getElementById(elementId);
+            const textToCopy = codeElement.innerText;
+
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = button.innerHTML;
+                button.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> ¡Copiado!';
+                lucide.createIcons();
+                button.classList.add('bg-green-600', 'text-white');
+                button.classList.remove('bg-gray-700', 'text-gray-300');
+                
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    lucide.createIcons();
+                    button.classList.remove('bg-green-600', 'text-white');
+                    button.classList.add('bg-gray-700', 'text-gray-300');
+                }, 2000);
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+                const textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> ¡Copiado!';
+                    lucide.createIcons();
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                        lucide.createIcons();
+                    }, 2000);
+                } catch (err) {
+                    console.error('Fallback falló: ', err);
+                }
+                document.body.removeChild(textArea);
+            });
+        }
+    </script>
+    <!-- Scripts de Prism.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+</body>
+
+</html>

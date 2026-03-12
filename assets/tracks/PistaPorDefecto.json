@@ -1,0 +1,63 @@
+{
+  "gridSize": {
+    "rows": 3,
+    "cols": 3
+  },
+  "gridParts": [
+    {
+      "r": 0,
+      "c": 0,
+      "partFile": "C1.03-CCS.png",
+      "rotation": 270
+    },
+    {
+      "r": 0,
+      "c": 1,
+      "partFile": "C1.01-RCS.png",
+      "rotation": 90
+    },
+    {
+      "r": 0,
+      "c": 2,
+      "partFile": "C1.03-CCS.png",
+      "rotation": 0
+    },
+    {
+      "r": 1,
+      "c": 0,
+      "partFile": "C1.01-RCS.png",
+      "rotation": 180
+    },
+    {
+      "r": 1,
+      "c": 1,
+      "partFile": "C0.00-BCS.png",
+      "rotation": 0
+    },
+    {
+      "r": 1,
+      "c": 2,
+      "partFile": "C1.01-RCS.png",
+      "rotation": 0
+    },
+    {
+      "r": 2,
+      "c": 0,
+      "partFile": "C1.03-CCS.png",
+      "rotation": 180
+    },
+    {
+      "r": 2,
+      "c": 1,
+      "partFile": "C1.01-RCS.png",
+      "rotation": 90
+    },
+    {
+      "r": 2,
+      "c": 2,
+      "partFile": "C1.03-CCS.png",
+      "rotation": 90
+    }
+  ],
+  "trackName": "MiPistaEditada"
+}

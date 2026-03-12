@@ -1,0 +1,48 @@
+void setup() {
+  // Configurar sensores como entradas (Pines 2 y 3)
+  pinMode(2, INPUT);
+  pinMode(3, INPUT);
+
+  // Configurar pines de motores como salidas (MX1616 / L298N)
+  pinMode(5, OUTPUT);
+  pinMode(6, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+}
+
+void loop() {
+  // Leer sensores (1 = Negro, 0 = Blanco)
+  int s_izq = digitalRead(2);
+  int s_der = digitalRead(3);
+
+  if (s_izq == 1 && s_der == 1) {
+    // Ambos en la línea: Avanzar recto
+    avanzar();
+  } 
+  else if (s_izq == 1 && s_der == 0) {
+    // Solo el izquierdo ve negro: Girar a la izquierda
+    girarIzquierda();
+  } 
+  else if (s_izq == 0 && s_der == 1) {
+    // Solo el derecho ve negro: Girar a la derecha
+    girarDerecha();
+  }
+  // Al no haber un "else", si ambos son 0, el robot seguirá haciendo 
+  // lo último que se le ordenó (avanzar o girar).
+}
+
+// Funciones de movimiento
+void avanzar() {
+  digitalWrite(5, HIGH); digitalWrite(6, LOW);
+  digitalWrite(9, HIGH); digitalWrite(10, LOW);
+}
+
+void girarIzquierda() {
+  digitalWrite(5, LOW);  digitalWrite(6, LOW);
+  digitalWrite(9, HIGH); digitalWrite(10, LOW);
+}
+
+void girarDerecha() {
+  digitalWrite(5, HIGH); digitalWrite(6, LOW);
+  digitalWrite(9, LOW);  digitalWrite(10, LOW);
+}

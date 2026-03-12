@@ -1,0 +1,59 @@
+{
+  "geometry": {
+    "width_m": 0.1,
+    "sensorOffset_m": 0.12,
+    "sensorSpread_m": 0.012,
+    "sensorDiameter_m": 0.02,
+    "sensorCount": 2,
+    "robotMass_kg": 0.38,
+    "comOffset_m": 0.04,
+    "tireGrip": 0.8,
+    "customWheels": null,
+    "customSensors": [],
+    "connections": {
+      "sensorPins": {
+        "farLeft": "",
+        "left": "2",
+        "center": "",
+        "right": "3",
+        "farRight": ""
+      },
+      "driverType": "l298n",
+      "motorPins": {
+        "leftEn": "VCC",
+        "leftIn1": "5",
+        "leftIn2": "6",
+        "rightIn3": "9",
+        "rightIn4": "10",
+        "rightEn": "VCC"
+      }
+    }
+  },
+  "parts": [
+    {
+      "id": "custom_body_1772999144031",
+      "name": "Cuerpo Custom",
+      "x": 0,
+      "y": -0.04,
+      "rotation": 0,
+      "isParametric": true,
+      "width_mm": 80,
+      "length_mm": 120,
+      "color": "#196114"
+    },
+    {
+      "id": "sensor",
+      "name": "Sensor",
+      "x": -0.012,
+      "y": -0.11,
+      "rotation": -1.5707963267948966
+    },
+    {
+      "id": "sensor",
+      "name": "Sensor",
+      "x": 0.012,
+      "y": -0.11,
+      "rotation": -1.5707963267948966
+    }
+  ]
+}
