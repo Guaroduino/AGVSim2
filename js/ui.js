@@ -46,6 +46,7 @@ export function getDOMElements() {
         sensorSpreadInput: document.getElementById('sensorSpread'),
         sensorDiameterInput: document.getElementById('sensorDiameter'),
         sensorCountSelect: document.getElementById('sensorCount'),
+        horizontalSymmetryToggle: document.getElementById('horizontalSymmetryToggle'),
         addCustomSensorBtn: document.getElementById('addCustomSensorBtn'),
         addLEDBtn: document.getElementById('addLEDBtn'),
         arduinoBoardSelect: document.getElementById('arduinoBoardSelect'),

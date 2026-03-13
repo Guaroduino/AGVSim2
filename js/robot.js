@@ -91,6 +91,19 @@ export class Robot {
                 this.sensors[`custom_${idx}`] = 0;
             });
         }
+
+        if (this.horizontalSymmetry) {
+            const keys = Object.keys(this.sensors).filter(k => !k.startsWith('custom_') && !k.endsWith('_rear') && !k.endsWith('_sym'));
+            keys.forEach(k => { this.sensors[k + '_rear'] = 0; });
+        }
+        
+        if (this.customSensors && this.customSensors.length > 0) {
+            this.customSensors.forEach((s, idx) => {
+                if (s.symmetric) {
+                    this.sensors[`custom_${idx}_sym`] = 0;
+                }
+            });
+        }
     }
 
     setImages(wheelImg) {
@@ -121,6 +134,9 @@ export class Robot {
 
         // Asignar sensores customizados
         this.customSensors = geometry.customSensors || null;
+
+        // Asignar simetría 
+        this.horizontalSymmetry = geometry.horizontalSymmetry || false;
 
         // Asignar conexiones de pines
         this.connections = geometry.connections || null;
@@ -371,18 +387,34 @@ export class Robot {
             positions.fullFarRight = { x_m: x - 3.5 * ySpread * sinA, y_m: y + 3.5 * ySpread * cosA };
         }
 
+        if (this.horizontalSymmetry) {
+            const symPositions = {};
+            for (const key in positions) {
+                if (positions.hasOwnProperty(key)) {
+                    // Reverse the local X offset
+                    symPositions[key + '_rear'] = {
+                        x_m: positions[key].x_m - 2 * offset * cosA,
+                        y_m: positions[key].y_m - 2 * offset * sinA
+                    };
+                }
+            }
+            Object.assign(positions, symPositions);
+        }
+
         if (this.customSensors && this.customSensors.length > 0) {
             this.customSensors.forEach((s, idx) => {
-                // s.x_mm es avance (eje X local del robot)
-                // s.y_mm es lateral (eje Y local del robot - izquierda es negativo en el canvas?)
-                // En el canvas, +X es derecha, +Y es abajo. El robot mira -Y en el origen
-                // Pero wait! angle_rad=0 mira a +X.
-                // Posición (X_local=avance, Y_local=lateral donde negativo es izquierda, positivo es derecha)
                 const xLocal_m = s.x_mm / 1000.0;
                 const yLocal_m = s.y_mm / 1000.0;
                 const wx = this.x_m + xLocal_m * cosA - yLocal_m * sinA;
                 const wy = this.y_m + xLocal_m * sinA + yLocal_m * cosA;
                 positions[`custom_${idx}`] = { x_m: wx, y_m: wy };
+                
+                if (s.symmetric) {
+                    const xLocal_m_sym = -xLocal_m; // Flip X for vertical/front-back symmetry
+                    const wx_sym = this.x_m + xLocal_m_sym * cosA - yLocal_m * sinA;
+                    const wy_sym = this.y_m + xLocal_m_sym * sinA + yLocal_m * cosA;
+                    positions[`custom_${idx}_sym`] = { x_m: wx_sym, y_m: wy_sym };
+                }
             });
         }
 

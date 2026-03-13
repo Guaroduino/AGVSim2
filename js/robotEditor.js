@@ -308,6 +308,47 @@ export function initRobotEditor(appInterface) {
                 [selCL, selCR].forEach(s => s?.addEventListener('change', () => window.forceGeometrySync()));
             }
 
+            // Normal sensors symmetry (_rear)
+            const sym = typeof elems !== 'undefined' && elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : (document.getElementById('horizontalSymmetryToggle') ? document.getElementById('horizontalSymmetryToggle').checked : false);
+            if (sym) {
+                let activeSensors = [];
+                if (count === 1) activeSensors = ['center'];
+                else if (count === 2) activeSensors = ['left', 'right'];
+                else if (count === 3) activeSensors = ['left', 'center', 'right'];
+                else if (count === 4) activeSensors = ['farLeft', 'left', 'right', 'farRight'];
+                else if (count === 5) activeSensors = ['farLeft', 'left', 'center', 'right', 'farRight'];
+                else if (count === 6) activeSensors = ['fullFarLeft', 'farLeft', 'left', 'right', 'farRight', 'fullFarRight'];
+                else if (count === 7) activeSensors = ['fullFarLeft', 'farLeft', 'left', 'center', 'right', 'farRight', 'fullFarRight'];
+                else if (count === 8) activeSensors = ['fullFarLeft', 'farLeft', 'left', 'centerLeft', 'centerRight', 'right', 'farRight', 'fullFarRight'];
+
+                const labelMap = {
+                    center: 'Centro',
+                    left: 'Izq.',
+                    right: 'Der.',
+                    farLeft: 'Ext. Izq.',
+                    farRight: 'Ext. Der.',
+                    fullFarLeft: 'Max. Izq.',
+                    fullFarRight: 'Max. Der.',
+                    centerLeft: 'Cen. Izq.',
+                    centerRight: 'Cen. Der.'
+                };
+
+                // Add to DOM right before custom sensors
+                activeSensors.forEach(sensorKey => {
+                    const rowRear = document.createElement('div');
+                    rowRear.className = 'pin-row sensor-pin-config special-sensor-pin';
+                    const idKey = 'pinSensor' + sensorKey.charAt(0).toUpperCase() + sensorKey.slice(1) + '_rear';
+                    rowRear.innerHTML = `<span>Pin Sensor ${labelMap[sensorKey]} Tras:</span>${pinSelect(idKey, '')}`;
+                    
+                    container.appendChild(rowRear);
+                    const selRear = rowRear.querySelector('select');
+                    if (currentGeometry?.connections?.sensorPins) {
+                        if (selRear) selRear.value = currentGeometry.connections.sensorPins[sensorKey + '_rear'] || '';
+                    }
+                    if (selRear) selRear.addEventListener('change', () => window.forceGeometrySync());
+                });
+            }
+
             // existing custom sensor logic...
             const existingCustoms = container.querySelectorAll('.custom-sensor-pin');
             existingCustoms.forEach(el => el.remove());
@@ -372,7 +413,7 @@ export function initRobotEditor(appInterface) {
                     }
 
                     // Clones for custom sensors based on symmetry
-                    if (sym && sensor.y_mm !== 0) {
+                    if (sym) {
                         const createRowClone = (labelText, idSuffix) => {
                             createRow(labelText + ' C.', '_sym' + idSuffix);
                         };
@@ -427,11 +468,18 @@ export function initRobotEditor(appInterface) {
             const isSym = e.target.checked;
             // Actualizar el modo de simetría local si existe
             if(window.setSymmetryMode) window.setSymmetryMode(isSym);
+            
+            // Forzamos sync para actualizar geometría con la nueva bandera
+            let newGeo = getFormValues();
+            currentGeometry.horizontalSymmetry = isSym; // Force true here as getFormValues might be slightly out of sync if DOM hasn't flushed
+            
             // Re-render custom sensors list para mostrar/ocultar sombras
             if (window.renderCustomSensorsList) {
                 window.renderCustomSensorsList();
             }
-            updateConnectionsUI();
+            
+            updateSensorConnectionsUI(currentGeometry.sensorCount || 3);
+            window.forceGeometrySync();
         });
     }
 
@@ -442,8 +490,6 @@ export function initRobotEditor(appInterface) {
         if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
 
         currentGeometry.customSensors.forEach((sensor, idx) => {
-            const sym = elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false;
-            
             const createSensorRow = (isClone) => {
                 const item = document.createElement('div');
                 item.style.display = 'flex';
@@ -481,15 +527,19 @@ export function initRobotEditor(appInterface) {
 
                 if (isClone) typeLabel += " (Espejo)";
 
-                let valY = sensor.y_mm;
-                if (isClone) valY = -valY;
+                let valX = sensor.x_mm;
+                if (isClone) valX = -valX;
 
                 item.innerHTML = `
                     <span style="font-size:0.8em; min-width:60px;">${typeLabel}:</span>
-                    <input type="number" step="1" id="customSensorX_${idx}${isClone ? '_sym' : ''}" value="${sensor.x_mm}" placeholder="X (mm)" style="width: 60px; font-size: 0.8em;" ${isClone ? 'disabled' : ''}>
-                    <input type="number" step="1" id="customSensorY_${idx}${isClone ? '_sym' : ''}" value="${valY}" placeholder="Y (mm)" style="width: 60px; font-size: 0.8em;" ${isClone ? 'disabled' : ''}>
+                    <input type="number" step="1" id="customSensorX_${idx}${isClone ? '_sym' : ''}" value="${valX}" placeholder="X (mm)" style="width: 60px; font-size: 0.8em;" ${isClone ? 'disabled' : ''}>
+                    <input type="number" step="1" id="customSensorY_${idx}${isClone ? '_sym' : ''}" value="${sensor.y_mm}" placeholder="Y (mm)" style="width: 60px; font-size: 0.8em;" ${isClone ? 'disabled' : ''}>
                     ${extraHTML}
-                    ${!isClone ? `<button type="button" class="delCustomSensorBtn" data-idx="${idx}" style="padding: 2px 5px; font-size: 0.8em; background-color: #dc3545;" title="Borrar">X</button>` : `<div style="width: 20px;"></div>`}
+                    ${!isClone ? `
+                    <label style="font-size: 0.8em; display:flex; align-items:center; cursor:pointer;" title="Simétrico atrás">
+                        <input type="checkbox" id="customSensorSym_${idx}" ${sensor.symmetric ? 'checked' : ''}> Sym
+                    </label>
+                    <button type="button" class="delCustomSensorBtn" data-idx="${idx}" style="padding: 2px 5px; font-size: 0.8em; background-color: #dc3545;" title="Borrar">X</button>` : `<div style="width: 20px;"></div>`}
                 `;
                 return item;
             };
@@ -498,7 +548,7 @@ export function initRobotEditor(appInterface) {
             elems.customSensorsList.appendChild(mainItem);
 
             let cloneItem = null;
-            if (sym && sensor.y_mm !== 0) {
+            if (sensor.symmetric) {
                 cloneItem = createSensorRow(true);
                 elems.customSensorsList.appendChild(cloneItem);
             }
@@ -506,6 +556,7 @@ export function initRobotEditor(appInterface) {
             // Bind events for live update on original
             const inX = mainItem.querySelector(`#customSensorX_${idx}`);
             const inY = mainItem.querySelector(`#customSensorY_${idx}`);
+            const inSym = mainItem.querySelector(`#customSensorSym_${idx}`);
             let inAngle = null;
             let inDiam = null;
             let inCol = null;
@@ -520,7 +571,12 @@ export function initRobotEditor(appInterface) {
               if (sensor.type === 'ir') inNumPins = mainItem.querySelector(`#customSensorNumPins_${idx}`);
 
               const updateVal = () => {
-                  currentGeometry.customSensors[idx].x_mm = parseFloat(inX.value) || 0;
+                  let newX = parseFloat(inX.value) || 0;
+                  if (sensor.symmetric && newX < 0) {
+                      newX = Math.abs(newX);
+                      inX.value = newX;
+                  }
+                  currentGeometry.customSensors[idx].x_mm = newX;
                   currentGeometry.customSensors[idx].y_mm = parseFloat(inY.value) || 0;
                   if (inAngle) currentGeometry.customSensors[idx].angle = parseFloat(inAngle.value) || 0;
                   if (inMaxDist) currentGeometry.customSensors[idx].maxDistance = parseFloat(inMaxDist.value) || 500;
@@ -530,8 +586,8 @@ export function initRobotEditor(appInterface) {
                   if (cloneItem) {
                          const cX = cloneItem.querySelector(`#customSensorX_${idx}_sym`);
                          const cY = cloneItem.querySelector(`#customSensorY_${idx}_sym`);
-                         if (cX) cX.value = currentGeometry.customSensors[idx].x_mm;
-                         if (cY) cY.value = -(currentGeometry.customSensors[idx].y_mm);
+                         if (cX) cX.value = -(currentGeometry.customSensors[idx].x_mm);
+                         if (cY) cY.value = currentGeometry.customSensors[idx].y_mm;
                          if (inAngle) {
                              const cA = cloneItem.querySelector(`#customSensorAngle_${idx}_sym`);
                              if (cA) cA.value = -(currentGeometry.customSensors[idx].angle || 0);
@@ -548,7 +604,16 @@ export function initRobotEditor(appInterface) {
                   window.forceGeometrySync();
             };
             inX.addEventListener('input', updateVal);
-            inY.addEventListener('change', () => { updateVal(); if(sym) window.renderCustomSensorsList(); }); // Change re-renders to add/remove clone if Y=0
+            inY.addEventListener('input', updateVal);
+            if (inSym) {
+                inSym.addEventListener('change', (e) => {
+                    currentGeometry.customSensors[idx].symmetric = e.target.checked;
+                    updateVal(); // Recalculate clamps
+                    window.renderCustomSensorsList();
+                    if(typeof updateSensorConnectionsUI === 'function') updateSensorConnectionsUI(currentGeometry.sensorCount);
+                    window.forceGeometrySync();
+                });
+            }
             if (inAngle) inAngle.addEventListener('input', updateVal);
             if (inMaxDist) inMaxDist.addEventListener('input', updateVal);
             if (inDiam) inDiam.addEventListener('input', updateVal);
@@ -920,9 +985,28 @@ function getFormValues() {
         motorPins: motorPins
     };
 
-    if (currentGeometry && currentGeometry.customSensors) {
-        const sym = elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false;
+    const sym = elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false;
+    
+    if (sym) {
+        let count = parseInt(elems.sensorCountInput ? elems.sensorCountInput.value : 3);
+        let activeSensors = [];
+        if (count === 1) activeSensors = ['center'];
+        else if (count === 2) activeSensors = ['left', 'right'];
+        else if (count === 3) activeSensors = ['left', 'center', 'right'];
+        else if (count === 4) activeSensors = ['farLeft', 'left', 'right', 'farRight'];
+        else if (count === 5) activeSensors = ['farLeft', 'left', 'center', 'right', 'farRight'];
+        else if (count === 6) activeSensors = ['fullFarLeft', 'farLeft', 'left', 'right', 'farRight', 'fullFarRight'];
+        else if (count === 7) activeSensors = ['fullFarLeft', 'farLeft', 'left', 'center', 'right', 'farRight', 'fullFarRight'];
+        else if (count === 8) activeSensors = ['fullFarLeft', 'farLeft', 'left', 'centerLeft', 'centerRight', 'right', 'farRight', 'fullFarRight'];
 
+        activeSensors.forEach(k => {
+            const idKey = 'pinSensor' + k.charAt(0).toUpperCase() + k.slice(1) + '_rear';
+            const el = document.getElementById(idKey);
+            if (el && el.value) connections.sensorPins[k + '_rear'] = el.value;
+        });
+    }
+
+    if (currentGeometry && currentGeometry.customSensors) {
         currentGeometry.customSensors.forEach((sensor, idx) => {
             const type = sensor.type || 'ir';
             if (type === 'rgb' || type === 'tof') {
@@ -973,7 +1057,8 @@ function getFormValues() {
         tireGrip: elems.tireGripInput ? parseFloat(elems.tireGripInput.value) : DEFAULT_ROBOT_GEOMETRY.tireGrip,
         customWheels: currentGeometry ? currentGeometry.customWheels : null,
         customSensors: currentGeometry ? currentGeometry.customSensors : null,
-        connections: connections
+        connections: connections,
+        horizontalSymmetry: elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false
     };
 }
 
@@ -996,6 +1081,10 @@ function setFormValues(geometry) {
     if (elems.robotMassInput) elems.robotMassInput.value = geometry.robotMass_kg ?? DEFAULT_ROBOT_GEOMETRY.robotMass_kg;
     if (elems.comOffsetInput) elems.comOffsetInput.value = ((geometry.comOffset_m ?? DEFAULT_ROBOT_GEOMETRY.comOffset_m) * 1000).toFixed(1);
     if (elems.tireGripInput) elems.tireGripInput.value = geometry.tireGrip ?? DEFAULT_ROBOT_GEOMETRY.tireGrip;
+
+    if (elems.horizontalSymmetryToggle) {
+        elems.horizontalSymmetryToggle.checked = geometry.horizontalSymmetry || false;
+    }
 
     if (geometry.customWheels !== undefined) {
         currentGeometry.customWheels = geometry.customWheels;

@@ -358,14 +358,35 @@ export class Simulation {
         }
         const sensorPositions_m = this.robot.getSensorPositions_world_m();
         // Calculate sensor radius in pixels using robot's parameter
-        const sensorRadiusPx = Math.max(1, (this.robot.sensorDiameter_m / 2) * PIXELS_PER_METER);
-        
+        const defaultSensorRadiusPx = Math.max(1, (this.robot.sensorDiameter_m / 2) * PIXELS_PER_METER);
+
         // For each sensor, compute state
         for (const key in sensorPositions_m) {
             const pos = sensorPositions_m[key];
             const px = pos.x_m * PIXELS_PER_METER;
             const py = pos.y_m * PIXELS_PER_METER;
-            let onLine = this.track.isAreaOnLine(px, py, sensorRadiusPx);
+            
+            let physicsRadiusPx = defaultSensorRadiusPx;
+            
+            if (key.startsWith('custom_')) {
+                physicsRadiusPx = Math.max(2, 0.005 * PIXELS_PER_METER); // 10mm fixed for custom
+                let cleanKey = key;
+                if (key.endsWith('_sym')) cleanKey = key.replace('_sym', '');
+                const idxStr = cleanKey.replace('custom_', '');
+                const idx = parseInt(idxStr);
+                if (this.robot.customSensors && this.robot.customSensors[idx]) {
+                    const cSens = this.robot.customSensors[idx];
+                    if (cSens.detectionDiameter) {
+                        physicsRadiusPx = Math.max(1, (parseFloat(cSens.detectionDiameter) / 1000 / 2) * PIXELS_PER_METER);
+                    }
+                    if (cSens.type === 'tof' || cSens.type === 'rgb' || cSens.type === 'rfid' || cSens.type === 'led') {
+                        // These don't directly read the line, but we can set their physics radius to be bounding-box-ish or skip. We keep line detection output anyway just in case users use it, using a fixed 2px radius as fallback if not IR.
+                        if (cSens.type !== 'ir') physicsRadiusPx = 2;
+                    }
+                }
+            }
+
+            let onLine = this.track.isAreaOnLine(px, py, physicsRadiusPx);
             // Apply sensor noise if enabled
             if (this.params.sensorNoiseProb > 0 && Math.random() < this.params.sensorNoiseProb) {
                 onLine = !onLine;

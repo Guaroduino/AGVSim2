@@ -836,10 +836,30 @@ export class DistanceSensor extends BasePart {
 export let symmetryModeEnabled = false;
 export function setSymmetryMode(enabled) {
     symmetryModeEnabled = enabled;
+    if (window.placedParts) {
+        if (enabled) {
+            // Generate twins for existing parts if they don't have one and shouldn't be twins themselves
+            const partsToSync = [...window.placedParts];
+            partsToSync.forEach(p => {
+                if (!p.isTwin) {
+                    window.syncTwin(p, window.previewCanvas || document.getElementById('robotPreviewCanvas'));
+                }
+            });
+        } else {
+            // Remove all twins
+            window.placedParts = window.placedParts.filter(p => !p.isTwin);
+            // reset twinId on original parts
+            window.placedParts.forEach(p => p.twinId = null);
+        }
+        if (window.renderRobotPreview) {
+            window.renderRobotPreview();
+        }
+    }
 }
 
 export function syncTwin(part, previewCanvas) {
     if (!symmetryModeEnabled || !part) return;
+    if (!previewCanvas) previewCanvas = {width: 500, height: 450}; // fallback
     const cx = previewCanvas.width / 2;
     const cy = previewCanvas.height / 2;
     
