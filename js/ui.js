@@ -47,6 +47,8 @@ export function getDOMElements() {
         sensorDiameterInput: document.getElementById('sensorDiameter'),
         sensorCountSelect: document.getElementById('sensorCount'),
         addCustomSensorBtn: document.getElementById('addCustomSensorBtn'),
+        addLEDBtn: document.getElementById('addLEDBtn'),
+        arduinoBoardSelect: document.getElementById('arduinoBoardSelect'),
         customSensorsList: document.getElementById('customSensorsList'),
         applyRobotGeometryButton: document.getElementById('applyRobotGeometryButton'),
         resetRobotGeometryButton: document.getElementById('resetRobotGeometryButton'),
@@ -76,6 +78,10 @@ export function getDOMElements() {
         // Custom Parts UI
         addCustomWheelsBtn: document.getElementById('addCustomWheelsBtn'),
         addCustomBodyBtn: document.getElementById('addCustomBodyBtn'),
+        addRFIDReaderBtn: document.getElementById('addRFIDReaderBtn'),
+        addColorSensorBtn: document.getElementById('addColorSensorBtn'),
+        addDistanceSensorBtn: document.getElementById('addDistanceSensorBtn'),
+        editorSymmetryBtn: document.getElementById('editorSymmetryBtn'),
         customPartDialog: document.getElementById('customPartDialog'),
         customPartForm: document.getElementById('customPartForm'),
         customPartTitle: document.getElementById('customPartTitle'),
@@ -83,11 +89,16 @@ export function getDOMElements() {
         customPartLengthInput: document.getElementById('customPartLength'),
         customPartWidthInput: document.getElementById('customPartWidth'),
         customPartOffsetInput: document.getElementById('customPartOffset'),
+        customPartRotationInput: document.getElementById('customPartRotation'),
+        customPartUIDInput: document.getElementById('customPartUID'),
         customPartColorInput: document.getElementById('customPartColor'),
         cancelCustomPartBtn: document.getElementById('cancelCustomPart'),
         confirmCustomPartBtn: document.getElementById('confirmCustomPart'),
         customPartWidthContainer: document.getElementById('customPartWidthContainer'),
         customPartOffsetContainer: document.getElementById('customPartOffsetContainer'),
+        customPartRotationContainer: document.getElementById('customPartRotationContainer'),
+        customPartUIDContainer: document.getElementById('customPartUIDContainer'),
+        customPartColorContainer: document.getElementById('customPartColorContainer'),
 
         // Track Editor Tab
         trackEditorCanvas: document.getElementById('trackEditorCanvas'),
@@ -99,7 +110,18 @@ export function getDOMElements() {
         exportTrackToSimulatorButton: document.getElementById('exportTrackToSimulator'),
         trackPartsPalette: document.getElementById('trackPartsPalette'),
         trackEditorControls: document.querySelector('.track-editor-controls'),
-        trackModeDropdown: document.getElementById('trackModeDropdown')
+        trackModeDropdown: document.getElementById('trackModeDropdown'),
+        
+        // Interactive Elements
+        toolModeTrack: document.getElementById('toolModeTrack'),
+        toolModeRFID: document.getElementById('toolModeRFID'),
+        toolModeColor: document.getElementById('toolModeColor'),
+        toolModeHopper: document.getElementById('toolModeHopper'),
+        toolModeEraseInt: document.getElementById('toolModeEraseInt'),
+        intSettLabel: document.getElementById('intSettLabel'),
+        intSettValue: document.getElementById('intSettValue'),
+        intHopperLabel: document.getElementById('intHopperLabel'),
+        intSettImpact: document.getElementById('intSettImpact')
     };
 }
 
@@ -232,9 +254,24 @@ export function updateDynamicCodeHelp(geometry) {
     // Custom Sensors
     if (geometry.customSensors && geometry.customSensors.length > 0) {
         geometry.customSensors.forEach((s, idx) => {
-            const pinId = `custom_${idx}`;
-            if (fmtPin(sensorPins[pinId])) {
-                pinsHtml += `<li><b>${sensorPins[pinId]}</b>: Sensor Custom ${idx + 1}</li>`;
+            const type = s.type || 'ir';
+            const basePin = `custom_${idx}`;
+            let typeLabel = "Custom";
+            
+            if (type === 'rgb' || type === 'tof') {
+                typeLabel = type === 'rgb' ? "Color RGB" : "ToF";
+                if (fmtPin(sensorPins[`${basePin}_SDA`])) pinsHtml += `<li><b>${sensorPins[`${basePin}_SDA`]}</b>: Sensor ${typeLabel} ${idx + 1} (SDA)</li>`;
+                if (fmtPin(sensorPins[`${basePin}_SCL`])) pinsHtml += `<li><b>${sensorPins[`${basePin}_SCL`]}</b>: Sensor ${typeLabel} ${idx + 1} (SCL)</li>`;
+            } else if (type === 'rfid') {
+                typeLabel = "RFID";
+                ['SDA','SCK','MOSI','MISO','RST'].forEach(p => {
+                    if (fmtPin(sensorPins[`${basePin}_${p}`])) pinsHtml += `<li><b>${sensorPins[`${basePin}_${p}`]}</b>: Sensor ${typeLabel} ${idx + 1} (${p})</li>`;
+                });
+            } else {
+                typeLabel = type === 'ir' ? "IR Custom" : "LED";
+                if (fmtPin(sensorPins[basePin])) {
+                    pinsHtml += `<li><b>${sensorPins[basePin]}</b>: ${typeLabel} ${idx + 1}</li>`;
+                }
             }
         });
     }

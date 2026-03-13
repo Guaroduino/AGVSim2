@@ -224,13 +224,12 @@ export function initRobotParts() {
 
             const world = screenToWorld(screenX, screenY);
 
-            placedParts.push({
+            let np = new BasePart({
                 id: draggedPart.id,
                 name: draggedPart.name,
                 img: draggedPart.img,
                 x: world.x,
-                y: world.y
-            });
+                 y: world.y}); placedParts.push(np); syncTwin(np, previewCanvas);
 
             draggedPart = null;
             if (window.renderRobotPreview) window.renderRobotPreview();
@@ -286,7 +285,7 @@ export function initRobotParts() {
             const y = world.y;
 
             selectedPart.x = x - dragOffset.x;
-            selectedPart.y = y - dragOffset.y;
+            selectedPart.y = y - dragOffset.y; syncTwin(selectedPart, previewCanvas);
             renderRobotPreview();
         } else if (isPanning) {
             wasDragging = true;
@@ -353,10 +352,9 @@ export function initRobotParts() {
                 partHit = true;
                 if (eraseMode) {
                     console.log(`Erasing part: ${part.name}`);
-                    placedParts.splice(i, 1);
+                    const todel = placedParts[i]; if(todel && todel.twinId) { let tid = todel.twinId; placedParts = placedParts.filter(p => p.id !== tid); window.placedParts = placedParts; } placedParts.splice(i, 1); window.placedParts = placedParts;
                 } else {
-                    part.rotation = ((part.rotation || 0) + Math.PI / 2) % (2 * Math.PI);
-                    console.log(`Rotated part: ${part.name} to ${part.rotation} radians`);
+                    part.rotation = ((part.rotation || 0) + Math.PI / 2) % (2 * Math.PI); syncTwin(part, previewCanvas); console.log(`Rotated part: ${part.name} to ${part.rotation} radians`);
                 }
                 renderRobotPreview();
                 suppressNextClick = true;
@@ -445,13 +443,12 @@ export function initRobotParts() {
         const t = e.changedTouches[0];
         if (t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom) {
             // Drop part on canvas
-            placedParts.push({
+            let np = new BasePart({
                 id: touchDragPart.id,
                 name: touchDragPart.name,
                 img: new window.Image(),
                 x: world.x,
-                y: world.y
-            });
+                 y: world.y}); placedParts.push(np); syncTwin(np, previewCanvas);
             placedParts[placedParts.length - 1].img.src = getAssetPath(touchDragPart.src);
             drawRobotPreview(window.getPreviewZoom ? window.getPreviewZoom() : 1.0);
         }
@@ -500,7 +497,7 @@ export function initRobotParts() {
                     clearTimeout(tapTimeout);
                     lastTapTime = 0;
                     if (eraseMode) {
-                        placedParts.splice(i, 1);
+                        const todel = placedParts[i]; if(todel && todel.twinId) { let tid = todel.twinId; placedParts = placedParts.filter(p => p.id !== tid); window.placedParts = placedParts; } placedParts.splice(i, 1); window.placedParts = placedParts;
                     } else {
                         part.rotation = ((part.rotation || 0) + Math.PI / 2) % (2 * Math.PI);
                     }
@@ -525,7 +522,7 @@ export function initRobotParts() {
             const world = screenToWorld(touchPos.x, touchPos.y);
 
             touchMovePart.x = world.x - touchMoveOffset.x;
-            touchMovePart.y = world.y - touchMoveOffset.y;
+            touchMovePart.y = world.y - touchMoveOffset.y; syncTwin(touchMovePart, previewCanvas);
 
             // Limpiar el canvas y forzar redibujo completo para evitar trails/glitches en mobile
             if (window.renderRobotPreview) {
@@ -668,14 +665,7 @@ export function restorePlacedPartsRaw(partsArr) {
                 img.src = getAssetPath(partInfo.src);
             }
         }
-        placedParts.push({
-            id: p.id,
-            name: p.name,
-            img,
-            x: px,
-            y: py,
-            rotation: p.rotation || 0
-        });
+        let np = p.isParametric ? new BasePart({id: p.id, name: p.name, img, x: px, y: py, rotation: p.rotation || 0, isParametric: true, width_mm: p.width_mm, length_mm: p.length_mm, color: p.color}) : new BasePart({id: p.id, name: p.name, img, x: px, y: py, rotation: p.rotation || 0}); placedParts.push(np);
     });
     renderRobotPreview();
 }
@@ -737,8 +727,7 @@ export function addParametricBodyPart(width_mm, length_mm, offset_mm, color) {
     const centerY = (previewCanvas.height / 2) - (offset_mm * (PIXELS_PER_METER / 1000));
 
     img.onload = () => {
-        placedParts.push({
-            id: 'custom_body_' + Date.now(),
+        let np = new BasePart({ id: 'custom_body_' + Date.now(), 
             name: 'Cuerpo Custom',
             img: img,
             x: centerX,
@@ -748,7 +737,9 @@ export function addParametricBodyPart(width_mm, length_mm, offset_mm, color) {
             width_mm: width_mm,
             length_mm: length_mm,
             color: color
-        });
+        }); 
+        placedParts.push(np); 
+        syncTwin(np, previewCanvas);
         if (window.renderRobotPreview) {
             window.renderRobotPreview();
         } else {
@@ -757,6 +748,185 @@ export function addParametricBodyPart(width_mm, length_mm, offset_mm, color) {
     };
 }
 
+
+export class BasePart {
+    constructor({ id, name, x, y, rotation = 0, isParametric = false, width_mm, length_mm, color, img }) {
+        this.id = id;
+        this.name = name;
+        this.x = x;
+        this.y = y;
+        this.rotation = rotation;
+        this.isParametric = isParametric;
+        this.width_mm = width_mm;
+        this.length_mm = length_mm;
+        this.color = color;
+        this.img = img;
+        this.twinId = null; // Para la simetría
+        this.isTwin = false;
+    }
+    
+    draw(ctx) {
+        if (this.img && this.img.complete) {
+            const w = this.img.width;
+            const h = this.img.height;
+            ctx.drawImage(this.img, -w / 2, -h / 2);
+        } else {
+            ctx.fillStyle = this.color || 'rgba(0,0,0,0.5)';
+            ctx.fillRect(-15, -15, 30, 30);
+        }
+    }
+}
+
+export class RFIDReader extends BasePart {
+    constructor(opts) {
+        super(opts);
+        this.uid = opts.uid || '04:7B:3A:42';
+        this.type = 'RFIDReader';
+    }
+    draw(ctx) {
+        ctx.fillStyle = '#0055ff';
+        ctx.fillRect(-20, -10, 40, 20);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(-20, -10, 40, 20);
+        ctx.fillStyle = '#fff';
+        ctx.font = '8px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('RFID', 0, 0);
+    }
+}
+
+export class ColorSensor extends BasePart {
+    constructor(opts) {
+        super(opts);
+        this.rgb = opts.rgb || {r:255, g:255, b:255};
+        this.type = 'ColorSensor';
+    }
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgb(${this.rgb.r}, ${this.rgb.g}, ${this.rgb.b})`;
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+export class DistanceSensor extends BasePart {
+    constructor(opts) {
+        super(opts);
+        this.type = 'DistanceSensor';
+    }
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(20, 15);
+        ctx.lineTo(-20, 15);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255, 100, 0, 0.7)';
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.stroke();
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-5, -15, 10, 5);
+    }
+}
+
+export let symmetryModeEnabled = false;
+export function setSymmetryMode(enabled) {
+    symmetryModeEnabled = enabled;
+}
+
+export function syncTwin(part, previewCanvas) {
+    if (!symmetryModeEnabled || !part) return;
+    const cx = previewCanvas.width / 2;
+    const cy = previewCanvas.height / 2;
+    
+    // Si la pieza no es un gemelo que se mueve
+    if (!part.isTwin) {
+        let twin = window.placedParts.find(p => p.id === part.twinId);
+        if (!twin) {
+            // Clonar
+            const opts = {...part, id: part.id + '_twin', twinId: part.id, isTwin: true};
+            if (part instanceof RFIDReader) twin = new RFIDReader({...opts, type: 'RFIDReader'});
+            else if (part instanceof ColorSensor) twin = new ColorSensor({...opts, type: 'ColorSensor'});
+            else if (part instanceof DistanceSensor) twin = new DistanceSensor({...opts, type: 'DistanceSensor'});
+            else twin = new BasePart(opts);
+            
+            part.twinId = twin.id;
+            window.placedParts.push(twin);
+        }
+        
+        // Espejar a lo largo del eje central X (cx)
+        const dx = part.x - cx;
+        twin.x = cx - dx;
+        twin.y = part.y; // Mantiene la misma posición vertical (profundidad)
+        twin.rotation = part.rotation;
+        if (twin.rotation !== undefined && twin.rotation !== null) {
+             // Reflejar rotación: si apunta a la derecha, el gemelo apunta a la izquierda
+             twin.rotation = -part.rotation;
+             // Ajustar ángulo según el sentido de dibujo, normalmente -rotation funciona para mirror en X.
+        }
+    }
+}
+
+export function removeTwin(partId) {
+    let part = window.placedParts.find(p => p.id === partId);
+    if(part && part.twinId) {
+        window.placedParts = window.placedParts.filter(p => p.id !== part.twinId && p.id !== part.twinId);
+        const idx = window.placedParts.findIndex(p => p.id === part.twinId);
+        if (idx !== -1) window.placedParts.splice(idx, 1);
+    }
+}
+
+export function addRFIDReader() {
+    const pc = document.getElementById('robotPreviewCanvas');
+    if(!pc) return;
+    const part = new RFIDReader({
+        id: 'rfid_' + Date.now(),
+        name: 'Lector RFID',
+        x: pc.width/2,
+        y: pc.height/2 - 50
+    });
+    window.placedParts.push(part);
+    syncTwin(part, pc);
+    if (window.renderRobotPreview) window.renderRobotPreview();
+}
+
+export function addColorSensor() {
+    const pc = document.getElementById('robotPreviewCanvas');
+    if(!pc) return;
+    const part = new ColorSensor({
+        id: 'color_' + Date.now(),
+        name: 'Sensor Color',
+        x: pc.width/2,
+        y: pc.height/2 - 50
+    });
+    window.placedParts.push(part);
+    syncTwin(part, pc);
+    if (window.renderRobotPreview) window.renderRobotPreview();
+}
+
+export function addDistanceSensor() {
+    const pc = document.getElementById('robotPreviewCanvas');
+    if(!pc) return;
+    const part = new DistanceSensor({
+        id: 'dist_' + Date.now(),
+        name: 'Sensor ToF',
+        x: pc.width/2,
+        y: pc.height/2 - 50
+    });
+    window.placedParts.push(part);
+    syncTwin(part, pc);
+    if (window.renderRobotPreview) window.renderRobotPreview();
+}
+
+window.setSymmetryMode = setSymmetryMode;
+window.addRFIDReader = addRFIDReader;
+window.addColorSensor = addColorSensor;
+window.addDistanceSensor = addDistanceSensor;
+
 window.PARTS = PARTS;
 window.clearPlacedParts = clearPlacedParts;
 window.getAssetPath = getAssetPath;
@@ -764,3 +934,7 @@ window.getPlacedParts = getPlacedParts;
 window.restorePlacedPartsRaw = restorePlacedPartsRaw;
 window.getPlacedPartsRaw = getPlacedPartsRaw;
 window.addParametricBodyPart = addParametricBodyPart;
+window.RFIDReader = RFIDReader;
+window.ColorSensor = ColorSensor;
+window.DistanceSensor = DistanceSensor;
+window.syncTwin = syncTwin;

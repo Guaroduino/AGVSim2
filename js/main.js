@@ -6,7 +6,7 @@ import { initCodeEditor, loadUserCode, executeUserSetup, executeUserLoop, getMot
 import { initRobotEditor, getCurrentRobotGeometry } from './robotEditor.js';
 import { initTrackEditor } from './trackEditor.js';
 import { loadAndScaleImage, getAssetPath } from './utils.js';
-import '../js/monaco-setup.js';
+import './monaco-setup.js';
 
 // Función para esperar a que Monaco esté listo
 function waitForMonaco(maxAttempts = 50) {

@@ -869,12 +869,10 @@ delay(5);
                         <canvas id="robotPreviewCanvas" width="500" height="450"></canvas>
                     </div>
                     <div class="robot-parts-palette">
-                        <h4>Partes Decorativas</h4>
+                        <h4>Partes Decorativas y Sensores</h4>
                         <div style="display: flex; gap: 0.5em; margin-bottom: 0.5em;">
-                            <button id="addCustomWheelsBtn" style="flex:1; padding: 0.4em; font-size:0.9em;">+ Ruedas
-                                Custom</button>
-                            <button id="addCustomBodyBtn" style="flex:1; padding: 0.4em; font-size:0.9em;">+ Cuerpo
-                                Custom</button>
+                            <button id="addCustomWheelsBtn" style="flex:1; padding: 0.4em; font-size:0.9em;">+ Ruedas Custom</button>
+                            <button id="addCustomBodyBtn" style="flex:1; padding: 0.4em; font-size:0.9em;">+ Cuerpo Custom</button>
                         </div>
                         <div id="robotPartsPalette">
                             <!-- Parts will be loaded here by JS -->
@@ -903,8 +901,18 @@ delay(5);
                                     <input type="number" id="customPartOffset" value="0" min="-150" max="150"
                                         style="width:100%; box-sizing:border-box; margin-top:0.2em;">
                                 </label>
+                                <label style="display:block; margin-bottom: 0.5em;" id="customPartRotationContainer">
+                                    Rotación (°):
+                                    <input type="number" id="customPartRotation" value="0" min="0" max="360"
+                                        style="width:100%; box-sizing:border-box; margin-top:0.2em;">
+                                </label>
+                                <label style="display:block; margin-bottom: 0.5em;" id="customPartUIDContainer">
+                                    UID RFID:
+                                    <input type="text" id="customPartUID" value="04:7B:3A:42"
+                                        style="width:100%; box-sizing:border-box; margin-top:0.2em;">
+                                </label>
                                 <label style="display:block; margin-bottom: 1em;">
-                                    Color:
+                                    Color / RGB:
                                     <input type="color" id="customPartColor" value="#ff0000"
                                         style="width:100%; height: 35px; box-sizing:border-box; cursor:pointer; margin-top:0.2em;">
                                 </label>
@@ -935,7 +943,9 @@ delay(5);
                     </div>
                 </div>
                 <div class="robot-parameters">
-                    <h3>Geometría del Robot (en milimetros)</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                        <h3 style="margin: 0;">Geometría del Robot (en milimetros)</h3>
+                    </div>
                     <label for="robotWidth">
                         Ancho (dist. ruedas) (mm):
                         <input type="number" id="robotWidth" value="100" step="1" min="20">
@@ -970,9 +980,25 @@ delay(5);
                         </select>
                     </label>
 
+                    <label style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 15px; font-weight: normal; cursor: pointer;">
+                        <span>Simetría Horizontal X (Espejo):</span>
+                        <input type="checkbox" id="horizontalSymmetryToggle" checked style="width: auto; margin: 0; transform: scale(1.2);">
+                    </label>
+
                     <div style="margin-top: 10px;">
-                        <button id="addCustomSensorBtn" style="width: 100%; padding: 0.4em; font-size:0.9em;">+ Agregar
-                            Sensor Custom</button>
+                        <label for="arduinoBoardSelect" style="font-weight: bold; display: block; margin-bottom: 5px;">Placa Arduino:</label>
+                        <select id="arduinoBoardSelect" style="width: 100%; margin-bottom: 10px; padding: 5px;">
+                            <option value="uno">Arduino UNO / NANO</option>
+                            <option value="mega">Arduino MEGA 2560</option>
+                        </select>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5em; margin-bottom: 0.5em;">
+                            <button id="addCustomSensorBtn" style="padding: 0.4em; font-size:0.8em;">+ IR Custom</button>
+                            <button id="addLEDBtn" style="padding: 0.4em; font-size:0.8em;" title="Añadir LED">+ LED</button>
+                            <button id="addRFIDReaderBtn" style="padding: 0.4em; font-size:0.8em;" title="Lector RFID">+ RFID</button>
+                            <button id="addColorSensorBtn" style="padding: 0.4em; font-size:0.8em;" title="Sensor de Color">+ RGB</button>
+                            <button id="addDistanceSensorBtn" style="padding: 0.4em; font-size:0.8em;" title="Sensor de Distancia (ToF)">+ ToF</button>
+                        </div>
                         <div id="customSensorsList" style="margin-top: 10px;"></div>
                     </div>
 
@@ -1306,7 +1332,7 @@ delay(5);
 
                     <!-- Paleta de piezas scrollable (horizontal) -->
                     <div
-                        style="flex: 2; min-width: 320px; background: var(--surface-color); padding: 0.8em; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+                        style="flex: 1.5; min-width: 250px; background: var(--surface-color); padding: 0.8em; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column;">
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
                             <strong style="font-size: 0.9em;">Paleta de Piezas</strong>
@@ -1315,7 +1341,27 @@ delay(5);
                         </div>
                         <div id="trackPartsPalette"
                             style="display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 0.5em; padding-bottom: 0.5em; align-items: center;">
-                            <!-- Piezas se cargarán aquí por JS (deberíamos asegurarnos que JS no las empuje con display:grid in CSS) -->
+                            <!-- Piezas se cargarán aquí por JS -->
+                        </div>
+                    </div>
+
+                    <!-- Elementos Interactivos -->
+                    <div
+                        style="flex: 1.5; min-width: 250px; background: var(--surface-color); padding: 0.8em; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+                        <strong style="font-size: 0.9em; margin-bottom: 0.5em;">Elementos Interactivos</strong>
+                        <div style="display: flex; gap: 0.3em; flex-wrap: wrap;">
+                            <button id="toolModeTrack" style="flex:1; padding: 0.3em; font-size: 0.8em; background-color: var(--primary-color); color: white; border-radius: 4px;">Pistas</button>
+                            <button id="toolModeRFID" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">RFID</button>
+                            <button id="toolModeColor" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Color</button>
+                            <button id="toolModeHopper" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Tolva</button>
+                            <button id="toolModeEraseInt" class="danger" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Borrar</button>
+                        </div>
+                        <div id="interactiveSettings" style="margin-top: 0.5em; padding-top: 0.5em; border-top: 1px solid var(--border-color); display: flex; gap: 0.5em; align-items: center;">
+                            <span id="intSettLabel" style="font-size:0.8em; min-width:60px;">ID / Color:</span>
+                            <input type="text" id="intSettValue" style="flex:1; font-size:0.8em; padding:0.2em;" placeholder="Valor...">
+                            <label id="intHopperLabel" style="font-size:0.8em; display:none; align-items:center; gap:0.2em;">
+                                Impacto <input type="checkbox" id="intSettImpact" style="margin:0;">
+                            </label>
                         </div>
                     </div>
                 </div>

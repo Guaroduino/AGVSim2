@@ -19,7 +19,7 @@ export function initRobotEditor(appInterface) {
     mainAppInterface = appInterface;
     
     // We need to re-fetch elements after they might have been injected/moved
-    const elems = getDOMElements();
+    let elems = getDOMElements();
 
     previewCanvas = elems.robotPreviewCanvas;
     if (!previewCanvas) {
@@ -146,10 +146,21 @@ export function initRobotEditor(appInterface) {
     };
 
     // --- Dynamic UI for Connections ---
-    // Genera un <select> de pines Arduino UNO con optgroups
     function pinSelect(id, defaultVal, pwmOnly = false) {
-        const pwmPins = [3, 5, 6, 9, 10, 11];
-        const allPins = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+        const board = document.getElementById('arduinoBoardSelect') ? document.getElementById('arduinoBoardSelect').value : 'uno';
+        
+        let pwmPins = [];
+        let allPins = [];
+        
+        if (board === 'uno') {
+            pwmPins = [3, 5, 6, 9, 10, 11];
+            allPins = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 'A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
+        } else if (board === 'mega') {
+            pwmPins = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 44, 45, 46]; // Common PWMs on MEGA
+            for(let i=2; i<=53; i++) allPins.push(i);
+            for(let i=0; i<=15; i++) allPins.push(`A${i}`);
+        }
+
         const pins = pwmOnly ? pwmPins : allPins;
         const pwmSet = new Set(pwmPins);
 
@@ -158,7 +169,7 @@ export function initRobotEditor(appInterface) {
         opts += `<option value="GND">Puente a Negativo (GND)</option>`;
 
         opts += pins.map(p => {
-            const label = pwmSet.has(p) ? `${p} — PWM~ / Digital` : `${p} — Digital`;
+            const label = pwmSet.has(p) ? `${p} — PWM~ / Digital` : `${p} — Digital/Analógico`;
             return `<option value="${p}">${label}</option>`;
         }).join('');
         return `<select id="${id}">${opts}</select>`;
@@ -302,22 +313,81 @@ export function initRobotEditor(appInterface) {
             existingCustoms.forEach(el => el.remove());
 
             if (currentGeometry && currentGeometry.customSensors) {
-                currentGeometry.customSensors.forEach((sensor, idx) => {
-                    const row = document.createElement('div');
-                    row.className = 'pin-row sensor-pin-config custom-sensor-pin';
-                    row.innerHTML = `
-                        <span>Pin Sensor Custom ${idx + 1}:</span>
-                        ${pinSelect(`pinSensorCustom_${idx}`, '')}
-                    `;
-                    container.appendChild(row);
+                const sym = typeof elems !== 'undefined' && elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : (document.getElementById('horizontalSymmetryToggle') ? document.getElementById('horizontalSymmetryToggle').checked : false);
 
-                    // Rebind event
-                    const sel = row.querySelector('select');
-                    if (sel) {
-                        sel.addEventListener('change', () => { window.forceGeometrySync(); });
-                        // Set value if exists
-                        if (currentGeometry.connections && currentGeometry.connections.sensorPins && currentGeometry.connections.sensorPins[`custom_${idx}`]) {
-                            sel.value = currentGeometry.connections.sensorPins[`custom_${idx}`];
+                currentGeometry.customSensors.forEach((sensor, idx) => {
+                    let typeLabel = "Custom";
+                    if (sensor.type === 'ir') typeLabel = "IR Custom";
+                    else if (sensor.type === 'rgb') typeLabel = "Color RGB";
+                    else if (sensor.type === 'rfid') typeLabel = "RFID";
+                    else if (sensor.type === 'tof') typeLabel = "ToF";
+                    else if (sensor.type === 'led') typeLabel = "LED";
+
+                    const isMultiPin = sensor.type === 'rgb' || sensor.type === 'tof' || sensor.type === 'rfid';
+                    
+                    const groupContainer = document.createElement('div');
+                    groupContainer.className = 'custom-sensor-pin'; // use same class so it gets cleared properly on redraw
+                    if (isMultiPin) {
+                        groupContainer.style.borderLeft = '3px solid #ff7f50';
+                        groupContainer.style.paddingLeft = '10px';
+                        groupContainer.style.marginLeft = '4px';
+                        groupContainer.style.marginBottom = '8px';
+                    } else {
+                        groupContainer.style.marginBottom = '8px';
+                    }
+                    container.appendChild(groupContainer);
+
+                    const createRow = (labelText, idSuffix) => {
+                        const r = document.createElement('div');
+                        r.className = 'pin-row sensor-pin-config';
+                        
+                        // We no longer need the hardcoded inline left margin if it's placed inside the grouped bordered container.
+                        r.innerHTML = `
+                            <span>${labelText}:</span>
+                            ${pinSelect(`pinSensorCustom_${idx}${idSuffix}`, '')}
+                        `;
+                        groupContainer.appendChild(r);
+
+                        const sel = r.querySelector('select');
+                        if (sel) {
+                            sel.addEventListener('change', () => { window.forceGeometrySync(); });
+                            const pinKey = `custom_${idx}${idSuffix}`;
+                            if (currentGeometry.connections && currentGeometry.connections.sensorPins && currentGeometry.connections.sensorPins[pinKey]) {
+                                sel.value = currentGeometry.connections.sensorPins[pinKey];
+                            }
+                        }
+                    };
+
+                    if (sensor.type === 'rgb' || sensor.type === 'tof') {
+                        createRow(`Pin ${typeLabel} ${idx + 1} (SDA)`, '_SDA');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (SCL)`, '_SCL');
+                    } else if (sensor.type === 'rfid') {
+                        createRow(`Pin ${typeLabel} ${idx + 1} (SDA_SS)`, '_SDA');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (SCK)`, '_SCK');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (MOSI)`, '_MOSI');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (MISO)`, '_MISO');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (RST)`, '_RST');
+                    } else {
+                        createRow(`Pin ${typeLabel} ${idx + 1}`, '');
+                    }
+
+                    // Clones for custom sensors based on symmetry
+                    if (sym && sensor.y_mm !== 0) {
+                        const createRowClone = (labelText, idSuffix) => {
+                            createRow(labelText + ' C.', '_sym' + idSuffix);
+                        };
+
+                        if (sensor.type === 'rgb' || sensor.type === 'tof') {
+                            createRowClone(`Pin ${typeLabel} ${idx + 1} (SDA)`, '_SDA');
+                            createRowClone(`Pin ${typeLabel} ${idx + 1} (SCL)`, '_SCL');
+                        } else if (sensor.type === 'rfid') {
+                            createRowClone(`Pin ${typeLabel} ${idx + 1} (SDA_SS)`, '_SDA');
+                            createRowClone(`Pin ${typeLabel} ${idx + 1} (SCK)`, '_SCK');
+                            createRowClone(`Pin ${typeLabel} ${idx + 1} (MOSI)`, '_MOSI');
+                            createRowClone(`Pin ${typeLabel} ${idx + 1} (MISO)`, '_MISO');
+                            createRowClone(`Pin ${typeLabel} ${idx + 1} (RST)`, '_RST');
+                        } else {
+                            createRowClone(`Pin ${typeLabel} ${idx + 1}`, '');
                         }
                     }
                 });
@@ -337,8 +407,34 @@ export function initRobotEditor(appInterface) {
         });
         updateSensorConnectionsUI(parseInt(elems.sensorCountSelect.value) || 3);
     }
+    
+    // --- Arduino Board Select logic ---
+    if (elems.arduinoBoardSelect) {
+        elems.arduinoBoardSelect.addEventListener('change', () => {
+            // Re-render connections UI to update available pins
+            const count = parseInt(elems.sensorCountSelect ? elems.sensorCountSelect.value : 3);
+            updateSensorConnectionsUI(count);
+            updateMotorConnectionsUI();
+            if (window.renderCustomSensorsList) {
+                window.renderCustomSensorsList();
+            }
+        });
+    }
 
     // --- Custom Sensors Logic ---
+    if (elems.horizontalSymmetryToggle) {
+        elems.horizontalSymmetryToggle.addEventListener('change', (e) => {
+            const isSym = e.target.checked;
+            // Actualizar el modo de simetría local si existe
+            if(window.setSymmetryMode) window.setSymmetryMode(isSym);
+            // Re-render custom sensors list para mostrar/ocultar sombras
+            if (window.renderCustomSensorsList) {
+                window.renderCustomSensorsList();
+            }
+            updateConnectionsUI();
+        });
+    }
+
     window.renderCustomSensorsList = function() {
         const elems = getDOMElements();
         if (!elems.customSensorsList) return;
@@ -346,29 +442,117 @@ export function initRobotEditor(appInterface) {
         if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
 
         currentGeometry.customSensors.forEach((sensor, idx) => {
-            const item = document.createElement('div');
-            item.style.display = 'flex';
-            item.style.gap = '5px';
-            item.style.marginBottom = '5px';
-            item.style.alignItems = 'center';
-            item.innerHTML = `
-                <span style="font-size:0.8em; min-width:60px;">Custom ${idx + 1}:</span>
-                <input type="number" step="1" id="customSensorX_${idx}" value="${sensor.x_mm}" placeholder="X (mm)" style="width: 70px; font-size: 0.8em;">
-                <input type="number" step="1" id="customSensorY_${idx}" value="${sensor.y_mm}" placeholder="Y (mm)" style="width: 70px; font-size: 0.8em;">
-                <button type="button" class="delCustomSensorBtn" data-idx="${idx}" style="padding: 2px 5px; font-size: 0.8em; background-color: #dc3545;">X</button>
-            `;
-            elems.customSensorsList.appendChild(item);
+            const sym = elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false;
+            
+            const createSensorRow = (isClone) => {
+                const item = document.createElement('div');
+                item.style.display = 'flex';
+                item.style.gap = '5px';
+                item.style.marginBottom = '5px';
+                item.style.alignItems = 'center';
+                if (isClone) {
+                    item.style.opacity = '0.6';
+                    item.style.backgroundColor = '#f0f0f0';
+                    item.style.padding = '2px';
+                    item.style.borderRadius = '4px';
+                }
 
-            // Bind events for live update
-            const inX = item.querySelector(`#customSensorX_${idx}`);
-            const inY = item.querySelector(`#customSensorY_${idx}`);
-            const updateVal = () => {
-                currentGeometry.customSensors[idx].x_mm = parseFloat(inX.value) || 0;
-                currentGeometry.customSensors[idx].y_mm = parseFloat(inY.value) || 0;
-                window.forceGeometrySync();
+                let extraHTML = '';
+                if (sensor.type === 'tof') {
+                    let dispAngle = sensor.angle || 0;
+                    if (isClone) dispAngle = -dispAngle;
+                    extraHTML = `<input type="number" step="1" id="customSensorAngle_${idx}${isClone ? '_sym' : ''}" value="${dispAngle}" placeholder="Ángulo (°)" style="width: 70px; font-size: 0.8em;" title="Ángulo" ${isClone ? 'disabled' : ''}>
+                                 <input type="number" step="1" id="customSensorMaxDist_${idx}${isClone ? '_sym' : ''}" value="${sensor.maxDistance || 500}" placeholder="Máx (mm)" style="width: 70px; font-size: 0.8em;" title="Distancia Máxima (mm)" ${isClone ? 'disabled' : ''}>`;
+                } else if (sensor.type === 'rgb' || sensor.type === 'rfid' || sensor.type === 'led') {
+                    extraHTML = `<input type="number" step="1" id="customSensorDiam_${idx}${isClone ? '_sym' : ''}" value="${sensor.detectionDiameter || 50}" placeholder="Diám. (mm)" style="width: 70px; font-size: 0.8em;" title="Diámetro" ${isClone ? 'disabled' : ''}>`;
+                    if (sensor.type === 'led') {
+                        extraHTML += `<input type="color" id="customSensorColor_${idx}${isClone ? '_sym' : ''}" value="${sensor.color || '#ff0000'}" style="width: 30px; height: 20px; padding:0; border:none; margin-left: 5px;" title="Color LED" ${isClone ? 'disabled' : ''}>`;
+                    }
+                } else if (sensor.type === 'ir') {
+                    extraHTML = `<input type="number" step="1" id="customSensorNumPins_${idx}${isClone ? '_sym' : ''}" value="${sensor.numPins || 1}" placeholder="Pines" style="width: 60px; font-size: 0.8em;" title="Cantidad de Pines" ${isClone ? 'disabled' : ''}>`;
+                }
+
+                let typeLabel = "Custom";
+                if (sensor.type === 'ir') typeLabel = "IR Custom";
+                else if (sensor.type === 'rgb') typeLabel = "Color RGB";
+                else if (sensor.type === 'rfid') typeLabel = "RFID";
+                else if (sensor.type === 'tof') typeLabel = "ToF";
+                else if (sensor.type === 'led') typeLabel = "LED";
+
+                if (isClone) typeLabel += " (Espejo)";
+
+                let valY = sensor.y_mm;
+                if (isClone) valY = -valY;
+
+                item.innerHTML = `
+                    <span style="font-size:0.8em; min-width:60px;">${typeLabel}:</span>
+                    <input type="number" step="1" id="customSensorX_${idx}${isClone ? '_sym' : ''}" value="${sensor.x_mm}" placeholder="X (mm)" style="width: 60px; font-size: 0.8em;" ${isClone ? 'disabled' : ''}>
+                    <input type="number" step="1" id="customSensorY_${idx}${isClone ? '_sym' : ''}" value="${valY}" placeholder="Y (mm)" style="width: 60px; font-size: 0.8em;" ${isClone ? 'disabled' : ''}>
+                    ${extraHTML}
+                    ${!isClone ? `<button type="button" class="delCustomSensorBtn" data-idx="${idx}" style="padding: 2px 5px; font-size: 0.8em; background-color: #dc3545;" title="Borrar">X</button>` : `<div style="width: 20px;"></div>`}
+                `;
+                return item;
+            };
+
+            const mainItem = createSensorRow(false);
+            elems.customSensorsList.appendChild(mainItem);
+
+            let cloneItem = null;
+            if (sym && sensor.y_mm !== 0) {
+                cloneItem = createSensorRow(true);
+                elems.customSensorsList.appendChild(cloneItem);
+            }
+
+            // Bind events for live update on original
+            const inX = mainItem.querySelector(`#customSensorX_${idx}`);
+            const inY = mainItem.querySelector(`#customSensorY_${idx}`);
+            let inAngle = null;
+            let inDiam = null;
+            let inCol = null;
+            let inMaxDist = null;
+              let inNumPins = null;
+              if (sensor.type === 'tof') {
+                  inAngle = mainItem.querySelector(`#customSensorAngle_${idx}`);
+                  inMaxDist = mainItem.querySelector(`#customSensorMaxDist_${idx}`);
+              }
+              if (sensor.type === 'rgb' || sensor.type === 'rfid' || sensor.type === 'led') inDiam = mainItem.querySelector(`#customSensorDiam_${idx}`);
+              if (sensor.type === 'led') inCol = mainItem.querySelector(`#customSensorColor_${idx}`);
+              if (sensor.type === 'ir') inNumPins = mainItem.querySelector(`#customSensorNumPins_${idx}`);
+
+              const updateVal = () => {
+                  currentGeometry.customSensors[idx].x_mm = parseFloat(inX.value) || 0;
+                  currentGeometry.customSensors[idx].y_mm = parseFloat(inY.value) || 0;
+                  if (inAngle) currentGeometry.customSensors[idx].angle = parseFloat(inAngle.value) || 0;
+                  if (inMaxDist) currentGeometry.customSensors[idx].maxDistance = parseFloat(inMaxDist.value) || 500;
+                  if (inDiam) currentGeometry.customSensors[idx].detectionDiameter = parseFloat(inDiam.value) || 0;
+                  if (inCol) currentGeometry.customSensors[idx].color = inCol.value;
+                  if (inNumPins) currentGeometry.customSensors[idx].numPins = parseInt(inNumPins.value) || 1;
+                  if (cloneItem) {
+                         const cX = cloneItem.querySelector(`#customSensorX_${idx}_sym`);
+                         const cY = cloneItem.querySelector(`#customSensorY_${idx}_sym`);
+                         if (cX) cX.value = currentGeometry.customSensors[idx].x_mm;
+                         if (cY) cY.value = -(currentGeometry.customSensors[idx].y_mm);
+                         if (inAngle) {
+                             const cA = cloneItem.querySelector(`#customSensorAngle_${idx}_sym`);
+                             if (cA) cA.value = -(currentGeometry.customSensors[idx].angle || 0);
+                         }
+                         if (inMaxDist) {
+                             const cM = cloneItem.querySelector(`#customSensorMaxDist_${idx}_sym`);
+                             if (cM) cM.value = currentGeometry.customSensors[idx].maxDistance || 500;
+                         }
+                         if (inDiam) {
+                             const cD = cloneItem.querySelector(`#customSensorDiam_${idx}_sym`);
+                             if (cD) cD.value = currentGeometry.customSensors[idx].detectionDiameter || 0;
+                         }
+                  }
+                  window.forceGeometrySync();
             };
             inX.addEventListener('input', updateVal);
-            inY.addEventListener('input', updateVal);
+            inY.addEventListener('change', () => { updateVal(); if(sym) window.renderCustomSensorsList(); }); // Change re-renders to add/remove clone if Y=0
+            if (inAngle) inAngle.addEventListener('input', updateVal);
+            if (inMaxDist) inMaxDist.addEventListener('input', updateVal);
+            if (inDiam) inDiam.addEventListener('input', updateVal);
+            if (inCol) inCol.addEventListener('input', updateVal);
         });
 
         // Bind delete buttons
@@ -403,7 +587,47 @@ export function initRobotEditor(appInterface) {
     if (elems.addCustomSensorBtn) {
         elems.addCustomSensorBtn.addEventListener('click', () => {
             if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
-            currentGeometry.customSensors.push({ x_mm: 50, y_mm: 0 }); // Default pos
+            currentGeometry.customSensors.push({ type: 'ir', x_mm: 50, y_mm: 0 }); // Default pos
+            renderCustomSensorsList();
+            updateSensorConnectionsUI(currentGeometry.sensorCount);
+            window.forceGeometrySync();
+        });
+    }
+
+    if (elems.addLEDBtn) {
+        elems.addLEDBtn.addEventListener('click', () => {
+            if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
+            currentGeometry.customSensors.push({ type: 'led', x_mm: 50, y_mm: 0, detectionDiameter: 10, color: '#ff0000' });
+            renderCustomSensorsList();
+            updateSensorConnectionsUI(currentGeometry.sensorCount);
+            window.forceGeometrySync();
+        });
+    }
+    
+    if (elems.addRFIDReaderBtn) {
+        elems.addRFIDReaderBtn.addEventListener('click', () => {
+            if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
+            currentGeometry.customSensors.push({ type: 'rfid', x_mm: 50, y_mm: 0, detectionDiameter: 50 }); // Default pos
+            renderCustomSensorsList();
+            updateSensorConnectionsUI(currentGeometry.sensorCount);
+            window.forceGeometrySync();
+        });
+    }
+    
+    if (elems.addColorSensorBtn) {
+        elems.addColorSensorBtn.addEventListener('click', () => {
+            if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
+            currentGeometry.customSensors.push({ type: 'rgb', x_mm: 50, y_mm: 0, detectionDiameter: 5 }); // Default pos
+            renderCustomSensorsList();
+            updateSensorConnectionsUI(currentGeometry.sensorCount);
+            window.forceGeometrySync();
+        });
+    }
+    
+    if (elems.addDistanceSensorBtn) {
+        elems.addDistanceSensorBtn.addEventListener('click', () => {
+            if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
+            currentGeometry.customSensors.push({ type: 'tof', x_mm: 50, y_mm: 0, angle: 0, maxDistance: 500 }); // Default pos
             renderCustomSensorsList();
             updateSensorConnectionsUI(currentGeometry.sensorCount);
             window.forceGeometrySync();
@@ -452,11 +676,29 @@ export function initRobotEditor(appInterface) {
     observer.observe(robotEditorTab, { attributes: true });
 
     // Custom Parts Dialog Logic
+    if (elems.editorSymmetryBtn) {
+        elems.editorSymmetryBtn.addEventListener('click', (e) => {
+            // we toggle the state using our window function (if symmetryModeEnabled in robotParts isn't easily accessible, we handle state here and push downstream)
+            // It was defined as a let in robotParts, so let's keep track locally or use window.symmetryModeEnabled if exported correctly
+            const current = e.target.textContent.includes('(Activa)');
+            const nextState = !current;
+            if(window.setSymmetryMode) window.setSymmetryMode(nextState);
+            e.target.textContent = nextState ? 'Simetría (Activa)' : 'Simetría (Inactiva)';
+            e.target.style.background = nextState ? '#ffca28' : '';
+        });
+    }
+
     if (elems.addCustomWheelsBtn) {
         elems.addCustomWheelsBtn.addEventListener('click', () => {
             elems.customPartTitle.textContent = 'Añadir Ruedas Custom';
             elems.customPartType.value = 'wheels';
-            elems.customPartOffsetContainer.style.display = 'none'; // Solo X y Largo
+            elems.customPartOffsetContainer.style.display = 'none';
+            if(elems.customPartRotationContainer) elems.customPartRotationContainer.style.display = 'none';
+            if(elems.customPartUIDContainer) elems.customPartUIDContainer.style.display = 'none';
+            if(elems.customPartWidthContainer) elems.customPartWidthContainer.style.display = 'block';
+            elems.customPartColorContainer.style.display = 'block';
+            elems.customPartLengthInput.parentElement.style.display = 'block';
+            
             elems.customPartLengthInput.value = 65;
             elems.customPartWidthInput.value = 25;
             elems.customPartColorInput.value = '#000000';
@@ -467,6 +709,12 @@ export function initRobotEditor(appInterface) {
             elems.customPartTitle.textContent = 'Añadir Cuerpo Custom';
             elems.customPartType.value = 'body';
             elems.customPartOffsetContainer.style.display = 'block';
+            if(elems.customPartRotationContainer) elems.customPartRotationContainer.style.display = 'none';
+            if(elems.customPartUIDContainer) elems.customPartUIDContainer.style.display = 'none';
+            if(elems.customPartWidthContainer) elems.customPartWidthContainer.style.display = 'block';
+            elems.customPartColorContainer.style.display = 'block';
+            elems.customPartLengthInput.parentElement.style.display = 'block';
+
             elems.customPartLengthInput.value = 120;
             elems.customPartWidthInput.value = 80;
             elems.customPartOffsetInput.value = 0;
@@ -474,16 +722,39 @@ export function initRobotEditor(appInterface) {
             elems.customPartDialog.showModal();
         });
 
+        const resetForm = () => {
+            elems.customPartOffsetContainer.style.display = 'none';
+            if(elems.customPartRotationContainer) elems.customPartRotationContainer.style.display = 'none';
+            if(elems.customPartUIDContainer) elems.customPartUIDContainer.style.display = 'none';
+            if(elems.customPartWidthContainer) elems.customPartWidthContainer.style.display = 'none';
+            elems.customPartColorContainer.style.display = 'none';
+            elems.customPartLengthInput.parentElement.style.display = 'none';
+        };
+
         elems.cancelCustomPartBtn.addEventListener('click', () => {
             elems.customPartDialog.close();
         });
 
-        elems.customPartForm.addEventListener('submit', () => {
+        // Evento custom para someter el dialogo
+        const nextSubmit = () => {
             const type = elems.customPartType.value;
-            const length_mm = parseFloat(elems.customPartLengthInput.value);
-            const width_mm = parseFloat(elems.customPartWidthInput.value);
+            const length_mm = parseFloat(elems.customPartLengthInput.value) || 0;
+            const width_mm = parseFloat(elems.customPartWidthInput.value) || 0;
             const offset_mm = parseFloat(elems.customPartOffsetInput.value) || 0;
             const color = elems.customPartColorInput.value;
+            const rot = parseFloat(elems.customPartRotationInput.value) || 0;
+            const uid = elems.customPartUIDInput.value;
+            
+            const hex2rgb = (hex) => {
+                let r = parseInt(hex.slice(1,3), 16) || 255;
+                let g = parseInt(hex.slice(3,5), 16) || 255;
+                let b = parseInt(hex.slice(5,7), 16) || 255;
+                return {r, g, b};
+            };
+
+            const cx = (previewCanvas ? previewCanvas.width : 500) / 2;
+            const cy = (previewCanvas ? previewCanvas.height : 450) / 2 - 50;
+            let p;
 
             if (type === 'wheels') {
                 currentGeometry.customWheels = { length_m: length_mm / 1000, width_m: width_mm / 1000, color };
@@ -493,8 +764,26 @@ export function initRobotEditor(appInterface) {
                 if (window.addParametricBodyPart) {
                     window.addParametricBodyPart(width_mm, length_mm, offset_mm, color);
                 }
+            } else if (type === 'rfid' && window.PARTS) {
+                p = new window.RFIDReader({ id: 'rfid_'+Date.now(), name: 'Lector RFID', x: cx, y: cy, rotation: rot * Math.PI / 180, uid: uid, type:'RFIDReader' });
+            } else if (type === 'rgb' && window.PARTS) {
+                p = new window.ColorSensor({ id: 'rgb_'+Date.now(), name: 'Sensor Color', x: cx, y: cy, rotation: rot * Math.PI / 180, rgb: hex2rgb(color), type:'ColorSensor' });
+            } else if (type === 'tof' && window.PARTS) {
+                p = new window.DistanceSensor({ id: 'tof_'+Date.now(), name: 'Sensor ToF', x: cx, y: cy, rotation: rot * Math.PI / 180, type:'DistanceSensor' });
             }
-        });
+            
+            if (p) {
+                window.placedParts.push(p);
+                if (window.syncTwin) window.syncTwin(p, previewCanvas);
+                if (window.renderRobotPreview) window.renderRobotPreview();
+            }
+        };
+
+        // Remove old submit wrapper to avoid duplicate events
+        let newForm = elems.customPartForm.cloneNode(true);
+        elems.customPartForm.parentNode.replaceChild(newForm, elems.customPartForm);
+        elems = getDOMElements(); // refresh
+        elems.customPartForm.addEventListener('submit', nextSubmit);
     }
 
     // Guardar y cargar robot
@@ -574,7 +863,7 @@ export function initRobotEditor(appInterface) {
     );
 }
 
-// Agrega partes decorativas 'sensor' en las posiciones de los sensores
+// Las partes decorativas 'sensor' ya no se usan para los IR, pero mantenemos la función para limpiar si existían.
 function syncDecorativeSensorsWithGeometry() {
     // Elimina partes 'sensor' existentes sin reemplazar el array
     if (window.placedParts) {
@@ -584,30 +873,6 @@ function syncDecorativeSensorsWithGeometry() {
             }
         }
     }
-    // Obtiene las posiciones exactas de los sensores (en metros, sistema del canvas)
-    const sensorPositions = previewRobot.getSensorPositions_world_m();
-    // Carga la imagen del sensor
-    const partInfo = window.PARTS ? window.PARTS.find(pt => pt.id === 'sensor') : null;
-    let img = null;
-    if (partInfo) {
-        img = new window.Image();
-        img.src = window.getAssetPath(partInfo.src);
-    }
-    // Ángulo de rotación del robot en el editor
-    const editorAngle = -Math.PI / 2;
-    // Coloca cada parte decorativa exactamente donde va el círculo de sensor, pero 1cm (0.01m) más abajo
-    Object.values(sensorPositions).forEach(pos => {
-        const px = pos.x_m * PIXELS_PER_METER;
-        const py = (pos.y_m + 0.01) * PIXELS_PER_METER; // 1cm más abajo
-        window.placedParts.push({
-            id: 'sensor',
-            name: 'Sensor',
-            img,
-            x: px,
-            y: py,
-            rotation: editorAngle
-        });
-    });
 }
 
 function getFormValues() {
@@ -656,10 +921,42 @@ function getFormValues() {
     };
 
     if (currentGeometry && currentGeometry.customSensors) {
-        currentGeometry.customSensors.forEach((s, idx) => {
-            const el = document.getElementById(`pinSensorCustom_${idx}`);
-            if (el && el.value) {
-                connections.sensorPins[`custom_${idx}`] = el.value;
+        const sym = elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false;
+
+        currentGeometry.customSensors.forEach((sensor, idx) => {
+            const type = sensor.type || 'ir';
+            if (type === 'rgb' || type === 'tof') {
+                const elSDA = document.getElementById(`pinSensorCustom_${idx}_SDA`);
+                const elSCL = document.getElementById(`pinSensorCustom_${idx}_SCL`);
+                if (elSDA && elSDA.value) connections.sensorPins[`custom_${idx}_SDA`] = elSDA.value;
+                if (elSCL && elSCL.value) connections.sensorPins[`custom_${idx}_SCL`] = elSCL.value;
+                
+                if (sym) {
+                    const cSDA = document.getElementById(`pinSensorCustom_${idx}_sym_SDA`);
+                    const cSCL = document.getElementById(`pinSensorCustom_${idx}_sym_SCL`);
+                    if (cSDA && cSDA.value) connections.sensorPins[`custom_${idx}_sym_SDA`] = cSDA.value;
+                    if (cSCL && cSCL.value) connections.sensorPins[`custom_${idx}_sym_SCL`] = cSCL.value;
+                }
+            } else if (type === 'rfid') {
+                ['SDA','SCK','MOSI','MISO','RST'].forEach(p => {
+                    const el = document.getElementById(`pinSensorCustom_${idx}_${p}`);
+                    if (el && el.value) connections.sensorPins[`custom_${idx}_${p}`] = el.value;
+                    if (sym) {
+                        const elSym = document.getElementById(`pinSensorCustom_${idx}_sym_${p}`);
+                        if (elSym && elSym.value) connections.sensorPins[`custom_${idx}_sym_${p}`] = elSym.value;
+                    }
+                });
+            } else {
+                const el = document.getElementById(`pinSensorCustom_${idx}`);
+                if (el && el.value) {
+                    connections.sensorPins[`custom_${idx}`] = el.value;
+                }
+                if (sym) {
+                    const elSym = document.getElementById(`pinSensorCustom_${idx}_sym`);
+                    if (elSym && elSym.value) {
+                        connections.sensorPins[`custom_${idx}_sym`] = elSym.value;
+                    }
+                }
             }
         });
     }

@@ -493,15 +493,174 @@ export class Robot {
             const py = pos.y_m * PIXELS_PER_METER;
             const isOnLine = sensorReadings[key];
 
-            ctx.beginPath();
-            ctx.arc(px, py, sensorRadiusPx, 0, 2 * Math.PI);
-            ctx.fillStyle = isOnLine ? 'lime' : 'gray';
-            ctx.fill();
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 1;
-            ctx.stroke();
+              let currentDrawRadiusPx = sensorRadiusPx;
 
-            // Pin number label
+              let numP = 1;
+              let isIR = true;
+              let isToF = false;
+              let isLED = false;
+              let isRGB = false;
+              let isRFID = false;
+              let ledColor = '#ff0000';
+              let customIdx = -1;
+              let tofIdx = -1;
+              let tofAngle = 0;
+
+              if (key.startsWith('custom_')) {
+                  // Ignore global diagram for custom IRs (fallback to 10mm visually)
+                  currentDrawRadiusPx = Math.max(3, 0.005 * PIXELS_PER_METER);
+
+                  // handle clone naming like 'custom_0_sym'
+                  let cleanKey = key;
+                  if (key.endsWith('_sym')) cleanKey = key.replace('_sym', '');
+                  const idxStr = cleanKey.replace('custom_', '');
+                  const idx = parseInt(idxStr);
+                  if (this.customSensors && this.customSensors[idx]) {
+                      const cSens = this.customSensors[idx];
+
+                      if (cSens.detectionDiameter) {
+                          currentDrawRadiusPx = Math.max(2, (parseFloat(cSens.detectionDiameter) / 1000 / 2) * PIXELS_PER_METER);
+                      }
+
+                      if (cSens.type === 'ir') {
+                          numP = parseInt(cSens.numPins) || 1;
+                      } else {
+                          isIR = false;
+                      }
+                      
+                      if (cSens.type === 'rgb') {
+                          isRGB = true;
+                          customIdx = idx;
+                      }
+                      if (cSens.type === 'rfid') {
+                          isRFID = true;
+                          customIdx = idx;
+                      }
+
+                      if (cSens.type === 'tof') {
+                          isToF = true;
+                          tofIdx = idx;
+                          tofAngle = cSens.angle || 0;
+
+                          // Invert the angle display if this is the symmetric twin, mirroring the math in robotEditor.js
+                          if (key.endsWith('_sym')) {
+                              tofAngle = -tofAngle;
+                          }
+                      }
+                      if (cSens.type === 'led') {
+                          isLED = true;
+                          ledColor = cSens.color || '#ff0000';
+                      }
+                  }
+              }
+
+              ctx.save();
+              ctx.translate(px, py);
+              ctx.rotate(this.angle_rad);
+
+              if (isIR) {
+                  const rectWidth = currentDrawRadiusPx * 2;
+                  const rectHeight = currentDrawRadiusPx * 2;
+                  const totalWidth = numP * rectWidth;
+                  const startY = -totalWidth / 2 + rectWidth / 2; // y acts as the horizontal spread along sensory array axis
+
+                  for (let i = 0; i < numP; i++) {
+                      ctx.beginPath();
+                      // X is forward, Y is lateral in robot local space
+                      // So we position them along Y axis
+                      ctx.arc(0, startY + i * rectWidth, currentDrawRadiusPx, 0, 2 * Math.PI);
+                      ctx.fillStyle = isOnLine ? 'lime' : 'gray';
+                      ctx.fill();
+                      ctx.strokeStyle = 'black';
+                      ctx.lineWidth = 1;
+                      ctx.stroke();
+                  }
+              } else if (isToF) {
+                  // ToF specific rendering: Orange circle
+                  ctx.beginPath();
+                  ctx.arc(0, 0, currentDrawRadiusPx, 0, 2 * Math.PI);
+                  ctx.fillStyle = 'orange'; // Requested by user
+                  ctx.fill();
+                  ctx.strokeStyle = 'black';
+                  ctx.lineWidth = 1;
+                  ctx.stroke();
+
+                  // Directional Line for ToF Angle
+                  ctx.save();
+                  // tofAngle comes in degrees from the UI, so convert to radians. 
+                  // In local robot space, an angle of 0 points forward (towards positive X).
+                  let rad = (tofAngle * Math.PI) / 180;
+                  ctx.rotate(rad);
+                  ctx.beginPath();
+                  ctx.moveTo(0, 0);
+                  ctx.lineTo(currentDrawRadiusPx * 9, 0); // Give it a visible length
+                  ctx.strokeStyle = 'orange';
+                  ctx.lineWidth = 2;
+                  ctx.stroke();
+                  ctx.restore();
+              } else if (isLED) {
+                  ctx.beginPath();
+                  ctx.arc(0, 0, currentDrawRadiusPx, 0, 2 * Math.PI);
+                  if (isOnLine) {
+                      ctx.fillStyle = ledColor;
+                      ctx.shadowBlur = 8;
+                      ctx.shadowColor = ledColor;
+                  } else {
+                      let r = parseInt(ledColor.slice(1,3), 16) || 0;
+                      let g = parseInt(ledColor.slice(3,5), 16) || 0;
+                      let b = parseInt(ledColor.slice(5,7), 16) || 0;
+                      let avg = (r + g + b) / 3;
+                      r = Math.floor(r * 0.3 + avg * 0.2);
+                      g = Math.floor(g * 0.3 + avg * 0.2);
+                      b = Math.floor(b * 0.3 + avg * 0.2);
+                      ctx.fillStyle = `rgb(${r},${g},${b})`;
+                      ctx.shadowBlur = 0;
+                  }
+                  ctx.fill();
+                  ctx.shadowBlur = 0; // reset
+                  ctx.strokeStyle = 'black';
+                  ctx.lineWidth = 1;
+                  ctx.stroke();
+              } else if (isRGB || isRFID) {
+                  // Dashed circle for detection radius (in currentDrawRadiusPx)
+                  ctx.beginPath();
+                  ctx.arc(0, 0, currentDrawRadiusPx, 0, 2 * Math.PI);
+                  ctx.strokeStyle = isRGB ? 'blue' : 'purple';
+                  ctx.setLineDash([4, 4]);
+                  ctx.stroke();
+                  ctx.setLineDash([]); // reset dash
+
+                  // Rectangle for the sensor body
+                  ctx.fillStyle = 'white';
+                  ctx.strokeStyle = 'black';
+                  ctx.lineWidth = 1;
+                  const rw = 40; // rectangle width
+                  const rh = 16;
+                  ctx.fillRect(-rw/2, -rh/2, rw, rh);
+                  ctx.strokeRect(-rw/2, -rh/2, rw, rh);
+
+                  // Text inside
+                  ctx.save();
+                  // Cancel the robot rotation purely for text legibility if desired - 
+                  // actually, rotating text with sensor block is usually fine.
+                  // The prompt asks for rectangle with text inside.
+                  ctx.fillStyle = 'black';
+                  ctx.font = 'bold 9px Arial';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillText(`${isRGB ? 'Color' : 'RFID'}${(customIdx + 1)}`, 0, 0);
+                  ctx.restore();
+
+              } else {
+                  ctx.beginPath();
+                  ctx.arc(0, 0, currentDrawRadiusPx, 0, 2 * Math.PI);
+                  ctx.fillStyle = isOnLine ? 'lime' : 'gray';
+                  ctx.fill();
+                  ctx.strokeStyle = 'black';
+                  ctx.lineWidth = 1;
+                  ctx.stroke();
+              }
+              ctx.restore();
             let pinNumber = '';
             const conns = this.connections?.sensorPins;
             if (conns) {
@@ -564,10 +723,21 @@ export class Robot {
             if (pinNumber) {
                 ctx.save();
                 ctx.fillStyle = 'black';
-                ctx.font = `${Math.max(8, sensorRadiusPx * 0.9)}px Arial`;
+                let fontSize = Math.max(8, currentDrawRadiusPx * 0.9);
+                let label = pinNumber;
+
+                // Adjust font size and text if this is a ToF
+                if (isToF) {
+                    fontSize = Math.max(6, currentDrawRadiusPx * 0.6); // Smaller to fit word 'TOF'
+                    // Ensure the generic idx gets shown exactly as TOF <idx+1>
+                    // Only printing label if there's no custom text override
+                    label = "TOF " + (tofIdx + 1); 
+                }
+
+                ctx.font = `${fontSize}px Arial`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(pinNumber, px, py);
+                ctx.fillText(label, px, py);
                 ctx.restore();
             }
         }
