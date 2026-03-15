@@ -516,6 +516,8 @@ export class Simulation {
 
     // Utility to get current robot geometry
     getCurrentRobotGeometry() {
+        // Return a full geometry snapshot so reset/start keeps custom devices
+        // such as LEDs, panel elements and symmetry settings.
         return {
             width_m: this.robot.wheelbase_m,
             length_m: this.robot.length_m,
@@ -527,6 +529,10 @@ export class Simulation {
             comOffset_m: this.robot.comOffset_m,
             tireGrip: this.robot.tireGrip,
             customWheels: this.robot.customWheels || null,
+            customSensors: this.robot.customSensors || null,
+            panelScreen: this.robot.panelScreen || false,
+            panelButtons: this.robot.panelButtons || [],
+            horizontalSymmetry: this.robot.horizontalSymmetry || false,
             connections: this.robot.connections || null, // ← CRÍTICO: sin esto, se pierde la config de pines al reiniciar
         };
     }

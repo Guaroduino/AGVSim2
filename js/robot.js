@@ -739,11 +739,7 @@ export class Robot {
                       ctx.fillStyle = `rgb(${r},${g},${b})`;
                       ctx.shadowBlur = 0;
                   }
-                  ctx.fill();
-                  ctx.shadowBlur = 0; // reset
-                  ctx.strokeStyle = 'black';
-                  ctx.lineWidth = 1;
-                  ctx.stroke();
+                  ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = 'white'; ctx.lineWidth = 1; ctx.stroke();
               } else if (isRGB || isRFID) {
                   // Dashed circle for detection radius (in currentDrawRadiusPx)
                   ctx.beginPath();
