@@ -201,6 +201,19 @@ const arduinoAPI = {
                     if (sharedSimulationState.robot.customSensors && sharedSimulationState.robot.customSensors[idx]) {
                         const csType = sharedSimulationState.robot.customSensors[idx].type;
                         if (csType && csType.toLowerCase() === 'led' || csType === 'screen') {
+                            isLED = true;
+                            ledKey = key;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!motorPins.includes(pin) && !isLED) {
+                if (!_warnedPins.has(pin + "_not_motor")) {
+                    ArduinoSerial.println(`Advertencia: analogWrite(${pin}) - El pin ${pin} no está conectado a ningún motor ni LED en el Editor de Robot. (Debug: pNum=${pin} custSensors=${JSON.stringify(sharedSimulationState.robot.customSensors)} isLED=${isLED})`);
+                    _warnedPins.add(pin + "_not_motor");
+                }
             }
         }
 
