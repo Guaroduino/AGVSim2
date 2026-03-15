@@ -16,6 +16,7 @@ let _simStartTime = 0; // Track simulation start time so millis() starts at 0
 
 // NUEVO: Token para cancelar ejecuciones asíncronas flotantes al reiniciar
 let currentSimToken = 0;
+let mockOledCounter = 0;
 
 // Serial object for user code
 const ArduinoSerial = {
@@ -26,8 +27,15 @@ const ArduinoSerial = {
     begin: function (baudRate) {
         this.println(`Serial communication started at ${baudRate} baud (simulated).`);
     },
-    print: function (msg) {
-        this._buffer += String(msg);
+    print: function (msg, base) {
+        let out = msg;
+        if (base !== undefined && typeof msg === 'number') {
+            if (base === 16) out = Math.trunc(msg).toString(16).toUpperCase();
+            else if (base === 10) out = Math.trunc(msg).toString(10);
+            else if (base === 8) out = Math.trunc(msg).toString(8);
+            else if (base === 2) out = Math.trunc(msg).toString(2);
+        }
+        this._buffer += String(out);
         this._trimBuffer();
         this._outputElements.forEach(el => {
             if (el) {
@@ -58,6 +66,170 @@ const ArduinoSerial = {
         }
     }
 };
+
+// ---- Mock classes for common Arduino I2C/SPI libraries ----
+class MockAdafruitSSD1306 {
+    constructor(width, height, bus = null, resetPin = -1) {
+        this._id = ++mockOledCounter;
+        this.width = Number(width) || 128;
+        this.height = Number(height) || 64;
+        this.bus = bus;
+        this.resetPin = resetPin;
+        this.cursorX = 0;
+        this.cursorY = 0;
+        this._lines = [''];
+    }
+
+    begin(vccState = 0x02, i2cAddress = 0x3C, reset = true, periphBegin = true) {
+        this.vccState = vccState;
+        this.i2cAddress = i2cAddress;
+        this.reset = reset;
+        this.periphBegin = periphBegin;
+        return true;
+    }
+
+    clearDisplay() {
+        this.cursorX = 0;
+        this.cursorY = 0;
+        this._lines = [''];
+    }
+
+    setCursor(x, y) {
+        this.cursorX = Number(x) || 0;
+        this.cursorY = Number(y) || 0;
+    }
+
+    print(value = '') {
+        const text = String(value);
+        const idx = this._lines.length - 1;
+        this._lines[idx] += text;
+    }
+
+    println(value = '') {
+        this.print(value);
+        this._lines.push('');
+    }
+
+    display() {
+        const text = this._lines.join('\n');
+
+        if (sharedSimulationState?.robot) {
+            const robot = sharedSimulationState.robot;
+            if (!robot.oledDisplays || typeof robot.oledDisplays !== 'object') {
+                robot.oledDisplays = {};
+            }
+
+            const screenKeys = [];
+            if (Array.isArray(robot.customSensors)) {
+                robot.customSensors.forEach((sensor, idx) => {
+                    if (sensor && sensor.type === 'screen') {
+                        screenKeys.push(`custom_${idx}`);
+                        if (sensor.symmetric) screenKeys.push(`custom_${idx}_sym`);
+                    }
+                });
+            }
+            if (robot.panelScreen) {
+                screenKeys.push('panel');
+            }
+
+            const targetKey = screenKeys.length > 0
+                ? screenKeys[(this._id - 1) % screenKeys.length]
+                : 'panel';
+
+            robot.oledDisplays[targetKey] = {
+                text,
+                width: this.width,
+                height: this.height,
+                updatedAt: Date.now()
+            };
+            robot.oledDisplays.__last = robot.oledDisplays[targetKey];
+        }
+
+        return text;
+    }
+
+    getBufferText() {
+        return this._lines.join('\n');
+    }
+}
+
+class MockMFRC522 {
+    constructor(ssPin, rstPin) {
+        this.ssPin = ssPin;
+        this.rstPin = rstPin;
+        this.uid = {
+            size: 4,
+            uidByte: [0xDE, 0xAD, 0xBE, 0xEF]
+        };
+        this._cardPresent = true;
+    }
+
+    PCD_Init() {
+        return true;
+    }
+
+    PICC_IsNewCardPresent() {
+        const robotSensors = sharedSimulationState?.robot?.sensors;
+        if (typeof robotSensors?.rfidPresent === 'boolean') return robotSensors.rfidPresent;
+        return this._cardPresent;
+    }
+
+    PICC_ReadCardSerial() {
+        const robotSensors = sharedSimulationState?.robot?.sensors;
+        if (Array.isArray(robotSensors?.rfidUid) && robotSensors.rfidUid.length > 0) {
+            this.uid.uidByte = robotSensors.rfidUid.map(v => Number(v) & 0xFF);
+            this.uid.size = this.uid.uidByte.length;
+            return true;
+        }
+        return this._cardPresent;
+    }
+
+    PICC_HaltA() {
+        return true;
+    }
+}
+
+class MockAdafruitTCS34725 {
+    constructor(integrationTime = null, gain = null) {
+        this.integrationTime = integrationTime;
+        this.gain = gain;
+    }
+
+    begin() {
+        return true;
+    }
+
+    getRawData() {
+        // TODO: Leer color real del entorno/track según la posición del robot.
+        const color = sharedSimulationState?.robot?.sensors?.color;
+        if (color && typeof color === 'object') {
+            return {
+                r: Number(color.r) || 0,
+                g: Number(color.g) || 0,
+                b: Number(color.b) || 0,
+                c: Number(color.c) || 0
+            };
+        }
+        return { r: 120, g: 90, b: 60, c: 270 };
+    }
+}
+
+class MockAdafruitVL53L0X {
+    begin(i2cAddress = 0x29, debug = false, wire = null, sensorConfig = null) {
+        this.i2cAddress = i2cAddress;
+        this.debug = debug;
+        this.wire = wire;
+        this.sensorConfig = sensorConfig;
+        return true;
+    }
+
+    readRange() {
+        // TODO: Reemplazar por cálculo real de distancia en mm desde el motor físico.
+        const mm = sharedSimulationState?.robot?.sensors?.tofMm;
+        if (typeof mm === 'number' && Number.isFinite(mm)) return Math.max(0, Math.round(mm));
+        return 250;
+    }
+}
 
 // Helper: maps UI strings like "A0" to API integers etc.
 const resolveUIPin = (uiVal) => {
@@ -288,9 +460,35 @@ const arduinoAPI = {
         });
     },
     Serial: ArduinoSerial,
+    Wire: {
+        begin: () => { }
+    },
+    SPI: {
+        begin: () => { }
+    },
+    MockAdafruitSSD1306,
+    MockMFRC522,
+    MockAdafruitTCS34725,
+    MockAdafruitVL53L0X,
+    // Common library constants used by sample sketches.
+    SSD1306_SWITCHCAPVCC: 0x02,
+    TCS34725_INTEGRATIONTIME_2_4MS: 0,
+    TCS34725_INTEGRATIONTIME_24MS: 1,
+    TCS34725_INTEGRATIONTIME_50MS: 2,
+    TCS34725_INTEGRATIONTIME_101MS: 3,
+    TCS34725_INTEGRATIONTIME_154MS: 4,
+    TCS34725_INTEGRATIONTIME_700MS: 5,
+    TCS34725_GAIN_1X: 0,
+    TCS34725_GAIN_4X: 1,
+    TCS34725_GAIN_16X: 2,
+    TCS34725_GAIN_60X: 3,
     // Constants for user code (these are usually #defined in Arduino C++)
     HIGH: 1,
     LOW: 0,
+    HEX: 16,
+    DEC: 10,
+    OCT: 8,
+    BIN: 2,
     INPUT: "INPUT",
     OUTPUT: "OUTPUT",
     A0: 14, A1: 15, A2: 16, A3: 17, A4: 18, A5: 19, // Standard Arduino Uno mapping
@@ -397,20 +595,27 @@ function traducirArduinoAJS(codigoArduino) {
     const TYPES = [
         'unsigned\\s+long\\s+long', 'unsigned\\s+long', 'unsigned\\s+int',
         'unsigned\\s+short', 'unsigned\\s+char',
+        'uint64_t', 'int64_t',
+        'uint32_t', 'int32_t',
+        'uint16_t', 'int16_t',
+        'uint8_t', 'int8_t',
         'long\\s+long', 'long',
         'boolean', 'bool',
         'byte', 'word',
         'unsigned',
         'double', 'float',
         'short', 'int',
-        'String', 'char',
+        'char',
     ].join('|');
+
+    const RETURN_TYPES = `${TYPES}|String`;
 
     // Usamos \b en lugar de (?<!...) para máxima compatibilidad con iPads y navegadores
     const TYPE_RE = new RegExp(`\\b(?:${TYPES})\\b`, 'g');
     const CONST_RE = new RegExp(`\\bconst\\s+(?:${TYPES})\\b`, 'g');
-    const FN_RE = new RegExp(`\\b(?:void|${TYPES})\\s+(\\w+)\\s*\\(([^)]*)\\)`, 'g');
-    const FN_ARG_RE = new RegExp(`\\b(?:const\\s+)?(?:${TYPES})\\s+[*&]*\\s*(\\w+)`, 'g');
+    const FN_RE = new RegExp(`\\b(?:void|${RETURN_TYPES})\\s+(\\w+)\\s*\\(([^)]*)\\)`, 'g');
+    const ARG_TYPES = `${TYPES}|String`;
+    const FN_ARG_RE = new RegExp(`\\b(?:const\\s+)?(?:${ARG_TYPES})\\s+[*&]*\\s*(\\w+)`, 'g');
 
     // 1. Extraer nombres de todas las funciones definidas por el usuario
     const userFunctions = [];
@@ -427,6 +632,29 @@ function traducirArduinoAJS(codigoArduino) {
         .replace(/^#define\s+(\w+)\s+(.+)$/gm, (_, name, val) => `const ${name} = ${val.trim()};`)
         // Elimina directivas #include
         .replace(/#include\s*[<"].*?[>"]/g, '')
+        // Limpia ampersands de referencias de objetos globales comunes (&Wire, &SPI)
+        .replace(/&\s*(Wire|SPI)\b/g, '$1')
+        // Evita redeclarar parámetros inyectados por arduinoAPI (rompería por scope)
+        .replace(/\b(?:extern\s+)?(?:TwoWire|SPIClass)\s+(?:Wire|SPI)\s*;/g, '')
+        // Para otros buses locales, crea stub seguro
+        .replace(/\b(?:extern\s+)?(?:TwoWire|SPIClass)\s+([A-Za-z_]\w*)\s*;/g, 'const $1 = { begin: () => {} };')
+        // Constructores C++ de librerías a instancias de mocks JS
+        .replace(/\bAdafruit_SSD1306\s+(\w+)\s*\(([^;]*)\)\s*;/g, (_, name, args) => `let ${name} = new MockAdafruitSSD1306(${args});`)
+        .replace(/\bAdafruit_SSD1306\s+(\w+)\s*=\s*Adafruit_SSD1306\s*\(([^;]*)\)\s*;/g, (_, name, args) => `let ${name} = new MockAdafruitSSD1306(${args});`)
+        .replace(/\bMFRC522\s+(\w+)\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockMFRC522($2);')
+        .replace(/\bMFRC522\s+(\w+)\s*=\s*MFRC522\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockMFRC522($2);')
+        .replace(/\bAdafruit_TCS34725\s+(\w+)\s*=\s*Adafruit_TCS34725\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockAdafruitTCS34725($2);')
+        .replace(/\bAdafruit_TCS34725\s+(\w+)\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockAdafruitTCS34725($2);')
+        .replace(/\bAdafruit_TCS34725\s+(\w+)\s*;/g, 'let $1 = new MockAdafruitTCS34725();')
+        .replace(/\bAdafruit_VL53L0X\s+(\w+)\s*=\s*Adafruit_VL53L0X\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockAdafruitVL53L0X($2);')
+        .replace(/\bAdafruit_VL53L0X\s+(\w+)\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockAdafruitVL53L0X($2);')
+        .replace(/\bAdafruit_VL53L0X\s+(\w+)\s*;/g, 'let $1 = new MockAdafruitVL53L0X();')
+        // String en C++: convertir solo declaraciones, sin tocar String(...) constructor
+        .replace(/\bconst\s+String\s+(\w+)\s*=\s*/g, 'const $1 = ')
+        .replace(/\bString\s+(\w+)\s*=\s*/g, 'let $1 = ')
+        .replace(/\bString\s+(\w+)\s*;/g, 'let $1;')
+        // Reto de punteros: tcs.getRawData(&r,&g,&b,&c) -> destructuring assignment JS
+        .replace(/\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\.\s*getRawData\s*\(\s*&\s*([A-Za-z_]\w*)\s*,\s*&\s*([A-Za-z_]\w*)\s*,\s*&\s*([A-Za-z_]\w*)\s*,\s*&\s*([A-Za-z_]\w*)\s*\)\s*;?/g, '({ r: $2, g: $3, b: $4, c: $5 } = $1.getRawData());')
         // Elimina Serial.begin(...)
         .replace(/\bSerial\s*\.\s*begin\s*\([^)]*\)\s*;/g, '')
         // Transforma TODAS las definiciones de funciones a async
@@ -445,7 +673,7 @@ function traducirArduinoAJS(codigoArduino) {
         // delay(X) -> await delay(X)
         .replace(/\bdelay\s*\(/g, 'await delay(')
         // MÁS SEGURO: Soporte para while(condicion); vacío
-        .replace(/\b(while|for)\s*\(([\s\S]+?)\)\s*;/g, '$1 ($2) { await delay(1); }')
+        .replace(/\b(while|for)\s*\(([^)]*)\)\s*;/g, '$1 ($2) { await delay(1); }')
         // MÁS SEGURO: Inyectar await delay(1) en bucles while/for con llaves
         .replace(/\b(while|for)\s*\(([\s\S]+?)\)\s*\{/g, '$1 ($2) { await delay(1); ')
         // MÁS SEGURO: Inyectar un micro-delay al inicio del loop
@@ -454,10 +682,12 @@ function traducirArduinoAJS(codigoArduino) {
     // 3. Prefixing calls to user functions with await
     const allAsyncFns = [...new Set([...userFunctions, 'setup', 'loop'])];
     allAsyncFns.forEach(fnName => {
-        // Buscamos el nombre de la función seguido de '('
-        // Evitamos que esté precedido por 'async function ' o 'function '
-        const callRE = new RegExp(`(?<!async\\s+function\\s+|function\\s+)\\b${fnName}\\s*\\(`, 'g');
-        transpiled = transpiled.replace(callRE, (match) => {
+        const callRE = new RegExp(`\\b${fnName}\\s*\\(`, 'g');
+        transpiled = transpiled.replace(callRE, (match, offset, full) => {
+            const before = full.slice(Math.max(0, offset - 40), offset);
+            if (/async\s+function\s*$/.test(before) || /function\s*$/.test(before)) {
+                return match;
+            }
             return `await ${fnName}(`;
         });
     });

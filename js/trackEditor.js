@@ -117,7 +117,8 @@ export function initTrackEditor(appInterface) {
                 ctx.drawImage(trackCanvas, 0, 0);
                 renderEditor();
             }
-        }
+        },
+        getInteractiveElements: () => interactiveElements.map(el => ({ ...el }))
     };
 
     console.log("[TrackEditor] Starting track part assets loading...");

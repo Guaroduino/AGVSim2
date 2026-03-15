@@ -1,30 +1,80 @@
 {
   "geometry": {
+    "arduinoBoard": "mega",
     "width_m": 0.1,
     "sensorOffset_m": 0.12,
-    "sensorSpread_m": 0.012,
+    "sensorSpread_m": 0.015,
     "sensorDiameter_m": 0.02,
-    "sensorCount": 2,
+    "sensorCount": 3,
     "robotMass_kg": 0.38,
-    "comOffset_m": 0.04,
+    "comOffset_m": 0.0,
     "tireGrip": 0.8,
     "customWheels": null,
-    "customSensors": [],
+    "panelScreen": true,
+    "panelButtons": [
+      {
+        "color": "#ff0000",
+        "size": 12
+      },
+      {
+        "color": "#00aaff",
+        "size": 12
+      },
+      {
+        "color": "#00cc66",
+        "size": 12
+      }
+    ],
+    "horizontalSymmetry": true,
+    "customSensors": [
+      {
+        "type": "rfid",
+        "x_mm": 0,
+        "y_mm": 0,
+        "detectionDiameter": 50,
+        "symmetric": false
+      },
+      {
+        "type": "led",
+        "x_mm": 130,
+        "y_mm": 0,
+        "detectionDiameter": 10,
+        "color": "#ff0000",
+        "symmetric": true
+      }
+    ],
     "connections": {
       "sensorPins": {
         "farLeft": "",
-        "left": "2",
-        "center": "",
-        "right": "3",
-        "farRight": ""
+        "left": "22",
+        "center": "23",
+        "right": "24",
+        "farRight": "",
+        "left_rear": "28",
+        "center_rear": "29",
+        "right_rear": "30",
+        "pinPanelScreen_SDA": "20",
+        "pinPanelScreen_SCL": "21",
+        "pinPanelBtn_0": "25",
+        "pinPanelBtn_1": "26",
+        "pinPanelBtn_2": "27",
+        "custom_0_SDA": "53",
+        "custom_0_SCK": "52",
+        "custom_0_MOSI": "51",
+        "custom_0_MISO": "50",
+        "custom_0_RST": "49",
+        "custom_0_sym_SDA": "48",
+        "custom_0_sym_RST": "47",
+        "custom_1": "44",
+        "custom_1_sym": "45"
       },
       "driverType": "l298n",
       "motorPins": {
         "leftEn": "VCC",
         "leftIn1": "5",
         "leftIn2": "6",
-        "rightIn3": "9",
-        "rightIn4": "10",
+        "rightIn3": "7",
+        "rightIn4": "8",
         "rightEn": "VCC"
       }
     }
@@ -34,26 +84,12 @@
       "id": "custom_body_1772999144031",
       "name": "Cuerpo Custom",
       "x": 0,
-      "y": -0.04,
+      "y": 0,
       "rotation": 0,
       "isParametric": true,
       "width_mm": 80,
-      "length_mm": 120,
+      "length_mm": 220,
       "color": "#196114"
-    },
-    {
-      "id": "sensor",
-      "name": "Sensor",
-      "x": -0.012,
-      "y": -0.11,
-      "rotation": -1.5707963267948966
-    },
-    {
-      "id": "sensor",
-      "name": "Sensor",
-      "x": 0.012,
-      "y": -0.11,
-      "rotation": -1.5707963267948966
     }
   ]
 }

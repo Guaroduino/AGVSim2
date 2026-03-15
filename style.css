@@ -928,6 +928,12 @@ hr {
     min-width: 0;
 }
 
+.fixed-pin-badge {
+    margin-left: 0.25rem;
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
 .pin-row select {
     flex: 0 0 auto;
     width: 180px;

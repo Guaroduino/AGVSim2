@@ -357,6 +357,53 @@ export class Simulation {
             return;
         }
         const sensorPositions_m = this.robot.getSensorPositions_world_m();
+        const interactiveRFID = (window.trackEditorInstance && typeof window.trackEditorInstance.getInteractiveElements === 'function')
+            ? window.trackEditorInstance.getInteractiveElements().filter(el => el && el.type === 'rfid')
+            : [];
+
+        let firstDetectedTag = null;
+
+        const parseRFIDUid = (value) => {
+            const raw = String(value ?? '').trim();
+            if (!raw) return [0xDE, 0xAD, 0xBE, 0xEF];
+
+            const hexCandidates = raw.match(/[0-9a-fA-F]{2}/g);
+            if (hexCandidates && hexCandidates.length >= 1) {
+                return hexCandidates.slice(0, 10).map(h => parseInt(h, 16) & 0xFF);
+            }
+
+            const decCandidates = raw.match(/\d+/g);
+            if (decCandidates && decCandidates.length >= 1) {
+                return decCandidates.slice(0, 10).map(n => (parseInt(n, 10) || 0) & 0xFF);
+            }
+
+            return [0xDE, 0xAD, 0xBE, 0xEF];
+        };
+
+        const isSensorOverRFIDTag = (sensorX_px, sensorY_px, sensorRadius_px) => {
+            for (const tag of interactiveRFID) {
+                const x = Number(tag.x) || 0;
+                const y = Number(tag.y) || 0;
+                const w = Number(tag.width) || 0;
+                const h = Number(tag.height) || 0;
+                const rotDeg = Number(tag.rotation) || 0;
+
+                const cx = x + w / 2;
+                const cy = y + h / 2;
+
+                const dx = sensorX_px - cx;
+                const dy = sensorY_px - cy;
+                const theta = -rotDeg * Math.PI / 180;
+
+                const localX = dx * Math.cos(theta) - dy * Math.sin(theta);
+                const localY = dx * Math.sin(theta) + dy * Math.cos(theta);
+
+                if (Math.abs(localX) <= w / 2 + sensorRadius_px && Math.abs(localY) <= h / 2 + sensorRadius_px) {
+                    return tag;
+                }
+            }
+            return null;
+        };
         // Calculate sensor radius in pixels using robot's parameter
         const defaultSensorRadiusPx = Math.max(1, (this.robot.sensorDiameter_m / 2) * PIXELS_PER_METER);
 
@@ -384,6 +431,14 @@ export class Simulation {
                         if (cSens.type === 'led' || cSens.type === 'screen') {
                             isOutputSensor = true;
                         }
+                        if (cSens.type === 'rfid') {
+                            const foundTag = isSensorOverRFIDTag(px, py, physicsRadiusPx);
+                            this.robot.sensors[key] = foundTag ? 1 : 0;
+                            if (!firstDetectedTag && foundTag) {
+                                firstDetectedTag = foundTag;
+                            }
+                            isOutputSensor = true;
+                        }
                         // These don't directly read the line, but we can set their physics radius to be bounding-box-ish or skip. We keep line detection output anyway just in case users use it, using a fixed 2px radius as fallback if not IR.
                         if (cSens.type !== 'ir') physicsRadiusPx = 2;
                     }
@@ -399,6 +454,15 @@ export class Simulation {
                 // 1 = on line (HIGH), 0 = off line (LOW)
                 this.robot.sensors[key] = onLine ? 1 : 0;
             }
+        }
+
+        this.robot.sensors.rfidPresent = !!firstDetectedTag;
+        if (firstDetectedTag) {
+            this.robot.sensors.rfidUid = parseRFIDUid(firstDetectedTag.value);
+            this.robot.sensors.rfidTagRaw = String(firstDetectedTag.value ?? '');
+        } else {
+            this.robot.sensors.rfidUid = [];
+            this.robot.sensors.rfidTagRaw = '';
         }
     }
 

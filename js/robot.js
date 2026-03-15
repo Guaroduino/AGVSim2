@@ -104,6 +104,10 @@ export class Robot {
                 }
             });
         }
+
+        if (!this.oledDisplays || typeof this.oledDisplays !== 'object') {
+            this.oledDisplays = {};
+        }
     }
 
     setImages(wheelImg) {
@@ -519,10 +523,14 @@ export class Robot {
                 ctx.fillRect(-10, -40, 60, 60);
 
                 ctx.fillStyle = 'cyan';
-                ctx.font = '14px monospace';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText("OLED", 20, -10);
+                ctx.font = '8px monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                const panelText = this.oledDisplays?.panel?.text || this.oledDisplays?.__last?.text || '';
+                const lines = String(panelText).split('\n').slice(0, 6);
+                lines.forEach((line, i) => {
+                    ctx.fillText(line.slice(0, 12), -8, -38 + i * 9);
+                });
             }
 
             if (hasBtns) {
@@ -780,11 +788,15 @@ export class Robot {
                   ctx.strokeRect(-sw/2, -sh/2, sw, sh);
 
                   ctx.save();
-                  ctx.fillStyle = 'white';
-                  ctx.font = '8px monospace';
-                  ctx.textAlign = 'center';
-                  ctx.textBaseline = 'middle';
-                  ctx.fillText(`OLED`, 0, 0);
+                  ctx.fillStyle = '#7CFFFD';
+                  ctx.font = '6px monospace';
+                  ctx.textAlign = 'left';
+                  ctx.textBaseline = 'top';
+                  const oledEntry = this.oledDisplays?.[key] || this.oledDisplays?.__last || null;
+                  const lines = String(oledEntry?.text || '').split('\n').slice(0, 4);
+                  lines.forEach((line, i) => {
+                      ctx.fillText(line.slice(0, 10), -sw / 2 + 3, -sh / 2 + 3 + i * 7);
+                  });
                   ctx.restore();
 
               } else {
@@ -800,6 +812,9 @@ export class Robot {
             let pinNumber = '';
             const conns = this.connections?.sensorPins;
             if (conns) {
+                if (key.endsWith('_rear')) {
+                    pinNumber = conns[key] || '';
+                }
                 if (key === 'left') pinNumber = conns.left || '';
                 else if (key === 'center') pinNumber = conns.center || '';
                 else if (key === 'right') pinNumber = conns.right || '';

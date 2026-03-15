@@ -49,6 +49,7 @@ export function getDOMElements() {
         horizontalSymmetryToggle: document.getElementById('horizontalSymmetryToggle'),
         addCustomSensorBtn: document.getElementById('addCustomSensorBtn'),
         addLEDBtn: document.getElementById('addLEDBtn'),
+        addScreenBtn: document.getElementById('addScreenBtn'),
         arduinoBoardSelect: document.getElementById('arduinoBoardSelect'),
         customSensorsList: document.getElementById('customSensorsList'),
         applyRobotGeometryButton: document.getElementById('applyRobotGeometryButton'),

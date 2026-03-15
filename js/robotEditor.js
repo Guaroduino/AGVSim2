@@ -116,6 +116,7 @@ export function initRobotEditor(appInterface) {
 
         // Iterar de nuevo para deshabilitar las opciones usadas
         allSelects.forEach(sel => {
+            if (sel.dataset && sel.dataset.fixed === 'true') return;
             const currentVal = sel.value;
             Array.from(sel.options).forEach(opt => {
                 const optVal = opt.value;
@@ -173,6 +174,30 @@ export function initRobotEditor(appInterface) {
             return `<option value="${p}">${label}</option>`;
         }).join('');
         return `<select id="${id}">${opts}</select>`;
+    }
+
+    function getBoardFixedPins() {
+        const board = document.getElementById('arduinoBoardSelect') ? document.getElementById('arduinoBoardSelect').value : 'uno';
+        if (board === 'mega') {
+            return {
+                i2cSDA: '20',
+                i2cSCL: '21',
+                spiSCK: '52',
+                spiMOSI: '51',
+                spiMISO: '50'
+            };
+        }
+        return {
+            i2cSDA: 'A4',
+            i2cSCL: 'A5',
+            spiSCK: '13',
+            spiMOSI: '11',
+            spiMISO: '12'
+        };
+    }
+
+    function fixedPinSelect(id, pinValue, busLabel) {
+        return `<select id="${id}" data-fixed="true" disabled><option value="${pinValue}" selected>${pinValue} — Fijo ${busLabel}</option></select>`;
     }
 
     function updateMotorConnectionsUI() {
@@ -257,6 +282,37 @@ export function initRobotEditor(appInterface) {
     }
 
     function updateSensorConnectionsUI(count) {
+        // Rebuild static IR selects with board-specific options (UNO/MEGA)
+        // so loaded values like 22/23/24 are valid options on MEGA.
+        const staticSensorMap = {
+            pinSensorFullFarLeft: 'fullFarLeft',
+            pinSensorFarLeft: 'farLeft',
+            pinSensorLeft: 'left',
+            pinSensorCenter: 'center',
+            pinSensorRight: 'right',
+            pinSensorFarRight: 'farRight',
+            pinSensorFullFarRight: 'fullFarRight'
+        };
+
+        Object.entries(staticSensorMap).forEach(([id, key]) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+
+            const desired = (currentGeometry && currentGeometry.connections && currentGeometry.connections.sensorPins)
+                ? (currentGeometry.connections.sensorPins[key] || '')
+                : (el.value || '');
+
+            const wrapper = el.parentNode;
+            if (!wrapper) return;
+
+            el.outerHTML = pinSelect(id, desired);
+            const rebuilt = document.getElementById(id);
+            if (rebuilt) {
+                if (desired) rebuilt.value = String(desired);
+                rebuilt.addEventListener('change', () => window.forceGeometrySync());
+            }
+        });
+
         const rowFarLeft = document.getElementById('rowSensorFarLeft');
         const rowCenter = document.getElementById('rowSensorCenter');
         const rowFarRight = document.getElementById('rowSensorFarRight');
@@ -355,6 +411,7 @@ export function initRobotEditor(appInterface) {
 
             if (currentGeometry && currentGeometry.customSensors) {
                 const sym = typeof elems !== 'undefined' && elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : (document.getElementById('horizontalSymmetryToggle') ? document.getElementById('horizontalSymmetryToggle').checked : false);
+                const fixedPins = getBoardFixedPins();
 
                 currentGeometry.customSensors.forEach((sensor, idx) => {
                     let typeLabel = "Custom";
@@ -363,8 +420,9 @@ export function initRobotEditor(appInterface) {
                     else if (sensor.type === 'rfid') typeLabel = "RFID";
                     else if (sensor.type === 'tof') typeLabel = "ToF";
                     else if (sensor.type === 'led') typeLabel = "LED";
+                    else if (sensor.type === 'screen') typeLabel = "OLED";
 
-                    const isMultiPin = sensor.type === 'rgb' || sensor.type === 'tof' || sensor.type === 'rfid';
+                    const isMultiPin = sensor.type === 'rgb' || sensor.type === 'tof' || sensor.type === 'rfid' || sensor.type === 'screen';
                     
                     const groupContainer = document.createElement('div');
                     groupContainer.className = 'custom-sensor-pin'; // use same class so it gets cleared properly on redraw
@@ -378,36 +436,42 @@ export function initRobotEditor(appInterface) {
                     }
                     container.appendChild(groupContainer);
 
-                    const createRow = (labelText, idSuffix) => {
+                    const createRow = (labelText, idSuffix, fixedPinValue = null, fixedBusLabel = '', pwmOnly = false) => {
                         const r = document.createElement('div');
                         r.className = 'pin-row sensor-pin-config';
                         
                         // We no longer need the hardcoded inline left margin if it's placed inside the grouped bordered container.
                         r.innerHTML = `
                             <span>${labelText}:</span>
-                            ${pinSelect(`pinSensorCustom_${idx}${idSuffix}`, '')}
+                            ${fixedPinValue ? fixedPinSelect(`pinSensorCustom_${idx}${idSuffix}`, fixedPinValue, fixedBusLabel) : pinSelect(`pinSensorCustom_${idx}${idSuffix}`, '', pwmOnly)}
                         `;
                         groupContainer.appendChild(r);
 
                         const sel = r.querySelector('select');
                         if (sel) {
-                            sel.addEventListener('change', () => { window.forceGeometrySync(); });
                             const pinKey = `custom_${idx}${idSuffix}`;
-                            if (currentGeometry.connections && currentGeometry.connections.sensorPins && currentGeometry.connections.sensorPins[pinKey]) {
+                            if (fixedPinValue) {
+                                sel.value = String(fixedPinValue);
+                            } else {
+                                sel.addEventListener('change', () => { window.forceGeometrySync(); });
+                            }
+                            if (!fixedPinValue && currentGeometry.connections && currentGeometry.connections.sensorPins && currentGeometry.connections.sensorPins[pinKey]) {
                                 sel.value = currentGeometry.connections.sensorPins[pinKey];
                             }
                         }
                     };
 
-                    if (sensor.type === 'rgb' || sensor.type === 'tof') {
-                        createRow(`Pin ${typeLabel} ${idx + 1} (SDA)`, '_SDA');
-                        createRow(`Pin ${typeLabel} ${idx + 1} (SCL)`, '_SCL');
+                    if (sensor.type === 'rgb' || sensor.type === 'tof' || sensor.type === 'screen') {
+                        createRow(`Pin ${typeLabel} ${idx + 1} (SDA, fijo) <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_SDA', fixedPins.i2cSDA, 'I2C');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (SCL, fijo) <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_SCL', fixedPins.i2cSCL, 'I2C');
                     } else if (sensor.type === 'rfid') {
                         createRow(`Pin ${typeLabel} ${idx + 1} (SDA_SS)`, '_SDA');
-                        createRow(`Pin ${typeLabel} ${idx + 1} (SCK)`, '_SCK');
-                        createRow(`Pin ${typeLabel} ${idx + 1} (MOSI)`, '_MOSI');
-                        createRow(`Pin ${typeLabel} ${idx + 1} (MISO)`, '_MISO');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (SCK, fijo) <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_SCK', fixedPins.spiSCK, 'SPI');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (MOSI, fijo) <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_MOSI', fixedPins.spiMOSI, 'SPI');
+                        createRow(`Pin ${typeLabel} ${idx + 1} (MISO, fijo) <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_MISO', fixedPins.spiMISO, 'SPI');
                         createRow(`Pin ${typeLabel} ${idx + 1} (RST)`, '_RST');
+                    } else if (sensor.type === 'led') {
+                        createRow(`Pin ${typeLabel} ${idx + 1} (PWM recomendado)`, '', null, '', true);
                     } else {
                         createRow(`Pin ${typeLabel} ${idx + 1}`, '');
                     }
@@ -418,15 +482,17 @@ export function initRobotEditor(appInterface) {
                             createRow(labelText + ' C.', '_sym' + idSuffix);
                         };
 
-                        if (sensor.type === 'rgb' || sensor.type === 'tof') {
-                            createRowClone(`Pin ${typeLabel} ${idx + 1} (SDA)`, '_SDA');
-                            createRowClone(`Pin ${typeLabel} ${idx + 1} (SCL)`, '_SCL');
+                        if (sensor.type === 'rgb' || sensor.type === 'tof' || sensor.type === 'screen') {
+                            createRow(`Pin ${typeLabel} ${idx + 1} (SDA, fijo) C. <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_sym_SDA', fixedPins.i2cSDA, 'I2C');
+                            createRow(`Pin ${typeLabel} ${idx + 1} (SCL, fijo) C. <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_sym_SCL', fixedPins.i2cSCL, 'I2C');
                         } else if (sensor.type === 'rfid') {
                             createRowClone(`Pin ${typeLabel} ${idx + 1} (SDA_SS)`, '_SDA');
-                            createRowClone(`Pin ${typeLabel} ${idx + 1} (SCK)`, '_SCK');
-                            createRowClone(`Pin ${typeLabel} ${idx + 1} (MOSI)`, '_MOSI');
-                            createRowClone(`Pin ${typeLabel} ${idx + 1} (MISO)`, '_MISO');
+                            createRow(`Pin ${typeLabel} ${idx + 1} (SCK, fijo) C. <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_sym_SCK', fixedPins.spiSCK, 'SPI');
+                            createRow(`Pin ${typeLabel} ${idx + 1} (MOSI, fijo) C. <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_sym_MOSI', fixedPins.spiMOSI, 'SPI');
+                            createRow(`Pin ${typeLabel} ${idx + 1} (MISO, fijo) C. <span class="fixed-pin-badge" title="Pin fijo por hardware">🔒</span>`, '_sym_MISO', fixedPins.spiMISO, 'SPI');
                             createRowClone(`Pin ${typeLabel} ${idx + 1} (RST)`, '_RST');
+                        } else if (sensor.type === 'led') {
+                            createRow(`Pin ${typeLabel} ${idx + 1} (PWM recomendado) C.`, '_sym', null, '', true);
                         } else {
                             createRowClone(`Pin ${typeLabel} ${idx + 1}`, '');
                         }
@@ -435,6 +501,9 @@ export function initRobotEditor(appInterface) {
             }
         }
     }
+
+    window.updateSensorConnectionsUI = updateSensorConnectionsUI;
+    window.updateMotorConnectionsUI = updateMotorConnectionsUI;
 
     // --- Sensor count dropdown logic ---
     if (elems.sensorCountSelect) {
@@ -518,11 +587,12 @@ export function initRobotEditor(appInterface) {
         if (!configDiv) return;
         const isScreen = document.getElementById('panelScreenToggle')?.checked;
         const count = parseInt(document.getElementById('panelButtonCount')?.value || 0);
+        const fixedPins = getBoardFixedPins();
         
         let html = '';
         if (isScreen) {
-            html += '<div class=\"pin-row\" style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Pin Pantalla (SDA):</span>'+pinSelect('pinPanelScreen_SDA', 'A4')+'</div>';
-            html += '<div class=\"pin-row\" style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Pin Pantalla (SCL):</span>'+pinSelect('pinPanelScreen_SCL', 'A5')+'</div>';
+            html += '<div class=\"pin-row\" style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Pin Pantalla (SDA, fijo) <span class=\"fixed-pin-badge\" title=\"Pin fijo por hardware\">🔒</span>:</span>'+fixedPinSelect('pinPanelScreen_SDA', fixedPins.i2cSDA, 'I2C')+'</div>';
+            html += '<div class=\"pin-row\" style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Pin Pantalla (SCL, fijo) <span class=\"fixed-pin-badge\" title=\"Pin fijo por hardware\">🔒</span>:</span>'+fixedPinSelect('pinPanelScreen_SCL', fixedPins.i2cSCL, 'I2C')+'</div>';
         }
         for(let i=0; i<count; i++) {
             const c = currentGeometry && currentGeometry.panelButtons && currentGeometry.panelButtons[i] ? currentGeometry.panelButtons[i].color : '#ff0000';
@@ -537,6 +607,10 @@ export function initRobotEditor(appInterface) {
         
         configDiv.querySelectorAll('select').forEach(sel => {
             sel.addEventListener('change', window.forceGeometrySync);
+            if (sel.dataset && sel.dataset.fixed === 'true') {
+                sel.value = sel.options[0]?.value || sel.value;
+                return;
+            }
             if(currentGeometry && currentGeometry.connections && currentGeometry.connections.sensorPins) {
                 const val = currentGeometry.connections.sensorPins[sel.id];
                 if(val) sel.value = val;
@@ -585,6 +659,7 @@ export function initRobotEditor(appInterface) {
                 else if (sensor.type === 'rfid') typeLabel = "RFID";
                 else if (sensor.type === 'tof') typeLabel = "ToF";
                 else if (sensor.type === 'led') typeLabel = "LED";
+                else if (sensor.type === 'screen') typeLabel = "OLED";
 
                 if (isClone) typeLabel += " (Espejo)";
 
@@ -729,6 +804,16 @@ export function initRobotEditor(appInterface) {
             window.forceGeometrySync();
         });
     }
+
+    if (elems.addScreenBtn) {
+        elems.addScreenBtn.addEventListener('click', () => {
+            if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
+            currentGeometry.customSensors.push({ type: 'screen', x_mm: 50, y_mm: 0 });
+            renderCustomSensorsList();
+            updateSensorConnectionsUI(currentGeometry.sensorCount);
+            window.forceGeometrySync();
+        });
+    }
     
     if (elems.addRFIDReaderBtn) {
         elems.addRFIDReaderBtn.addEventListener('click', () => {
@@ -815,6 +900,11 @@ export function initRobotEditor(appInterface) {
     }
 
     if (elems.addCustomWheelsBtn) {
+        const colorContainer = elems.customPartColorContainer || elems.customPartColorInput?.parentElement;
+        const setVisible = (el, visible) => {
+            if (el) el.style.display = visible ? 'block' : 'none';
+        };
+
         elems.addCustomWheelsBtn.addEventListener('click', () => {
             elems.customPartTitle.textContent = 'Añadir Ruedas Custom';
             elems.customPartType.value = 'wheels';
@@ -822,7 +912,7 @@ export function initRobotEditor(appInterface) {
             if(elems.customPartRotationContainer) elems.customPartRotationContainer.style.display = 'none';
             if(elems.customPartUIDContainer) elems.customPartUIDContainer.style.display = 'none';
             if(elems.customPartWidthContainer) elems.customPartWidthContainer.style.display = 'block';
-            elems.customPartColorContainer.style.display = 'block';
+            setVisible(colorContainer, true);
             elems.customPartLengthInput.parentElement.style.display = 'block';
             
             elems.customPartLengthInput.value = 65;
@@ -838,7 +928,7 @@ export function initRobotEditor(appInterface) {
             if(elems.customPartRotationContainer) elems.customPartRotationContainer.style.display = 'none';
             if(elems.customPartUIDContainer) elems.customPartUIDContainer.style.display = 'none';
             if(elems.customPartWidthContainer) elems.customPartWidthContainer.style.display = 'block';
-            elems.customPartColorContainer.style.display = 'block';
+            setVisible(colorContainer, true);
             elems.customPartLengthInput.parentElement.style.display = 'block';
 
             elems.customPartLengthInput.value = 120;
@@ -853,7 +943,7 @@ export function initRobotEditor(appInterface) {
             if(elems.customPartRotationContainer) elems.customPartRotationContainer.style.display = 'none';
             if(elems.customPartUIDContainer) elems.customPartUIDContainer.style.display = 'none';
             if(elems.customPartWidthContainer) elems.customPartWidthContainer.style.display = 'none';
-            elems.customPartColorContainer.style.display = 'none';
+            setVisible(colorContainer, false);
             elems.customPartLengthInput.parentElement.style.display = 'none';
         };
 
@@ -1058,7 +1148,7 @@ function getFormValues() {
     const sym = elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false;
     
     if (sym) {
-        let count = parseInt(elems.sensorCountInput ? elems.sensorCountInput.value : 3);
+        let count = parseInt(elems.sensorCountSelect ? elems.sensorCountSelect.value : 3);
         let activeSensors = [];
         if (count === 1) activeSensors = ['center'];
         else if (count === 2) activeSensors = ['left', 'right'];
@@ -1079,7 +1169,7 @@ function getFormValues() {
     if (currentGeometry && currentGeometry.customSensors) {
         currentGeometry.customSensors.forEach((sensor, idx) => {
             const type = sensor.type || 'ir';
-            if (type === 'rgb' || type === 'tof') {
+            if (type === 'rgb' || type === 'tof' || type === 'screen') {
                 const elSDA = document.getElementById(`pinSensorCustom_${idx}_SDA`);
                 const elSCL = document.getElementById(`pinSensorCustom_${idx}_SCL`);
                 if (elSDA && elSDA.value) connections.sensorPins[`custom_${idx}_SDA`] = elSDA.value;
@@ -1117,6 +1207,7 @@ function getFormValues() {
 
     // Leer valores en milímetros y convertir a metros (o valores por default)
     return {
+        arduinoBoard: elems.arduinoBoardSelect ? elems.arduinoBoardSelect.value : 'uno',
         width_m: parseFloat(elems.robotWidthInput.value) / 1000 || DEFAULT_ROBOT_GEOMETRY.width_m,
         sensorOffset_m: parseFloat(elems.sensorOffsetInput.value) / 1000 || DEFAULT_ROBOT_GEOMETRY.sensorOffset_m,
         sensorSpread_m: parseFloat(elems.sensorSpreadInput.value) / 1000 || DEFAULT_ROBOT_GEOMETRY.sensorSpread_m,
@@ -1136,6 +1227,12 @@ function getFormValues() {
 
 function setFormValues(geometry) {
     const elems = getDOMElements();
+
+    if (elems.arduinoBoardSelect) {
+        elems.arduinoBoardSelect.value = geometry.arduinoBoard || 'uno';
+        elems.arduinoBoardSelect.dispatchEvent(new Event('change'));
+    }
+
     // Mostrar valores en milímetros en los inputs
     elems.robotWidthInput.value = (geometry.width_m * 1000).toFixed(1);
     elems.robotWidthInput.placeholder = 'Ancho (mm)';
@@ -1176,9 +1273,40 @@ function setFormValues(geometry) {
     } else {
         currentGeometry.customSensors = [];
     }
-    if (window.renderCustomSensorsList) {
-        window.renderCustomSensorsList();
-    }
+
+    currentGeometry.connections = geometry.connections || currentGeometry.connections || { sensorPins: {}, motorPins: {}, driverType: 'l298n' };
+
+    const applySensorPinValues = (sensorPins) => {
+        if (!sensorPins) return;
+        const mapKeyToId = (key) => {
+            if (key === 'left') return 'pinSensorLeft';
+            if (key === 'center') return 'pinSensorCenter';
+            if (key === 'right') return 'pinSensorRight';
+            if (key === 'farLeft') return 'pinSensorFarLeft';
+            if (key === 'farRight') return 'pinSensorFarRight';
+            if (key === 'fullFarLeft') return 'pinSensorFullFarLeft';
+            if (key === 'fullFarRight') return 'pinSensorFullFarRight';
+            if (key === 'centerLeft') return 'pinSensorCenterLeft';
+            if (key === 'centerRight') return 'pinSensorCenterRight';
+            if (key.endsWith('_rear')) {
+                const base = key.replace('_rear', '');
+                return 'pinSensor' + base.charAt(0).toUpperCase() + base.slice(1) + '_rear';
+            }
+            if (key.startsWith('custom_')) return 'pinSensorCustom_' + key.substring('custom_'.length);
+            if (key.startsWith('pinPanel')) return key;
+            return null;
+        };
+
+        Object.entries(sensorPins).forEach(([k, v]) => {
+            const id = mapKeyToId(k);
+            if (!id) return;
+            const el = document.getElementById(id);
+            if (el && v !== undefined && v !== null && v !== '') {
+                el.value = String(v);
+            }
+        });
+    };
+    if (window.renderCustomSensorsList) window.renderCustomSensorsList();
 
     // Set Connections
     if (geometry.connections) {
@@ -1222,10 +1350,15 @@ function setFormValues(geometry) {
         }
     }
 
-    // Visually show/hide sensor rows
-    if (typeof updateSensorConnectionsUI === 'function') {
-        updateSensorConnectionsUI(geometry.sensorCount || 3);
+    // Visually show/hide sensor rows and rebuild dynamic IR/custom pin rows
+    if (typeof window.updateSensorConnectionsUI === 'function') {
+        window.updateSensorConnectionsUI(geometry.sensorCount || 3);
     }
+
+    if (typeof window.renderPanelConfig === 'function') window.renderPanelConfig();
+    if (window.renderCustomSensorsList) window.renderCustomSensorsList();
+    applySensorPinValues(geometry.connections?.sensorPins || {});
+    if (typeof window.forceGeometrySync === 'function') window.forceGeometrySync();
 
     syncDecorativeSensorsWithGeometry();
 }
