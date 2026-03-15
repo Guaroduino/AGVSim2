@@ -5,7 +5,7 @@ import { loadAndScaleImage } from './utils.js'; // utils.js for image loading
 
 let editorCanvas, ctx;
 let grid = []; // Stores { partInfo, rotation_deg, image }
-let currentGridSize = { rows: 4, cols: 4 };
+let currentGridSize = { rows: 3, cols: 6 };
 let trackPartsImages = {}; // Cache for loaded track part images { 'fileName.png': ImageElement }
 let selectedTrackPart = null; // { ...partInfo, image: ImageElement }
 let savedState = null;
@@ -60,9 +60,9 @@ export function initTrackEditor(appInterface) {
     editorCanvas = elems.trackEditorCanvas;
     ctx = editorCanvas.getContext('2d');
 
-    // Set initial grid size to 3x3
-    currentGridSize = { rows: 3, cols: 3 };
-    elems.trackGridSizeSelect.value = '3x3';
+    // Set initial grid size to 3x6
+    currentGridSize = { rows: 3, cols: 6 };
+    elems.trackGridSizeSelect.value = '3x6';
 
     // Setup state management
     document.addEventListener('visibilitychange', () => {
@@ -141,10 +141,18 @@ export function initTrackEditor(appInterface) {
         // Setup initial grid with proper sizing
         console.log("[TrackEditor] Setting up initial grid...");
         setupGrid();
-        // Cargar pista por defecto en vez de generar aleatoria
+        // Generar pista aleatoria inicial en el grid por defecto (3x6)
         setTimeout(() => {
-            loadDefaultTrackDesign(elems.trackGridSizeSelect, elems.trackEditorTrackNameInput);
-            // No generamos pista aleatoria ni exportamos al simulador aquí
+            generateRandomTrackWithRetry_Modo();
+            if (elems.trackEditorTrackNameInput) {
+                elems.trackEditorTrackNameInput.value = 'PistaAleatoria_3x6';
+            }
+
+            // Exportar automáticamente la pista inicial al simulador
+            const exportedCanvas = exportTrackAsCanvas();
+            if (exportedCanvas && mainAppInterface) {
+                mainAppInterface.loadTrackFromEditor(exportedCanvas, 0, 0, 0);
+            }
         }, 100);
     });
 
@@ -445,12 +453,20 @@ function renderEditor(cellSize) {
             const x_topLeft = c * cellSize;
             const y_topLeft = r * cellSize;
 
-            // Draw subtle grid lines
-            ctx.strokeStyle = '#f0f0f0';
-            ctx.lineWidth = 0.5;
+            const currentGridPart = grid[r][c];
+            const hasTrackPart = !!(currentGridPart && currentGridPart.image);
+
+            // Keep empty cells visible with a subtle checker background.
+            if (!hasTrackPart) {
+                ctx.fillStyle = ((r + c) % 2 === 0) ? '#f8fbff' : '#eef4fa';
+                ctx.fillRect(x_topLeft, y_topLeft, cellSize, cellSize);
+            }
+
+            // Draw grid lines with stronger contrast for empty layouts.
+            ctx.strokeStyle = '#c1ccd8';
+            ctx.lineWidth = 1;
             ctx.strokeRect(x_topLeft, y_topLeft, cellSize, cellSize);
 
-            const currentGridPart = grid[r][c];
             if (currentGridPart && currentGridPart.image) {
                 const x_center = x_topLeft + cellSize / 2;
                 const y_center = y_topLeft + cellSize / 2;
@@ -463,6 +479,11 @@ function renderEditor(cellSize) {
             }
         }
     }
+
+    // Frame the full editable grid area so it remains visible when empty.
+    ctx.strokeStyle = '#8ea0b3';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(0, 0, currentGridSize.cols * cellSize, currentGridSize.rows * cellSize);
 
     drawInteractiveElements(ctx, cellSize / TRACK_PART_SIZE_PX);
 
@@ -1016,8 +1037,8 @@ function loadTrackDesign(event, gridSizeSelect, trackNameInput) {
                 throw new Error("Formato de archivo de diseño de pista inválido.");
             }
 
-            currentGridSize.rows = designData.gridSize.rows || 4;
-            currentGridSize.cols = designData.gridSize.cols || 4;
+            currentGridSize.rows = designData.gridSize.rows || 3;
+            currentGridSize.cols = designData.gridSize.cols || 6;
 
             if (gridSizeSelect) { // Update UI if element provided
                 gridSizeSelect.value = `${currentGridSize.rows}x${currentGridSize.cols}`;
@@ -1241,7 +1262,7 @@ function loadDefaultTrackDesign(gridSizeSelect, trackNameInput) {
                 throw new Error("Formato de archivo de diseño de pista inválido.");
             }
             currentGridSize.rows = designData.gridSize.rows || 3;
-            currentGridSize.cols = designData.gridSize.cols || 3;
+            currentGridSize.cols = designData.gridSize.cols || 6;
             if (gridSizeSelect) {
                 gridSizeSelect.value = `${currentGridSize.rows}x${currentGridSize.cols}`;
             }

@@ -3,8 +3,8 @@
 // Escala: 1 pixel en el canvas de simulación representa 1 milímetro en la "realidad"
 export const PIXELS_PER_METER = 1000; // 1000 mm = 1 m
 
-// Tamaño de las piezas de la pista en el editor (en píxeles de la imagen original)
-export const TRACK_PART_SIZE_PX = 350; // Cada pieza PNG es 350x350 px
+// Tamaño de las piezas de la pista en el editor (en píxeles simulados)
+export const TRACK_PART_SIZE_PX = 200; // 200 px = 200 mm por lado
 
 // Geometría por defecto del robot (en metros)
 export const DEFAULT_ROBOT_GEOMETRY = {
