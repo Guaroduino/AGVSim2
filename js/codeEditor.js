@@ -59,6 +59,15 @@ const ArduinoSerial = {
     }
 };
 
+// Helper: maps UI strings like "A0" to API integers etc.
+const resolveUIPin = (uiVal) => {
+    if (typeof uiVal === 'string' && uiVal.startsWith('A')) {
+        const num = parseInt(uiVal.substring(1));
+        return 14 + num; // Map A0-A5 to 14-19
+    }
+    return parseInt(uiVal);
+};
+
 // Arduino API shim for user code
 const arduinoAPI = {
     pinMode: (pin, mode) => {
@@ -68,14 +77,37 @@ const arduinoAPI = {
         // Validate against Robot Editor connections if available
         if (sharedSimulationState && sharedSimulationState.robot && sharedSimulationState.robot.connections) {
             const conns = sharedSimulationState.robot.connections;
-            const sensorPins = Object.values(conns.sensorPins).map(p => {
-                if (typeof p === 'string' && p.startsWith('A')) return 14 + parseInt(p.substring(1));
-                return parseInt(p);
-            });
+            const sensorPins = [];
+            const ledPins = [];
+            for (const [key, p] of Object.entries(conns.sensorPins)) {
+                let pNum = resolveUIPin(p);
+                if (!isNaN(pNum)) {
+                    // Check if it's an LED
+                    let isLED = false;
+                    // ArduinoSerial.println(JSON.stringify(sharedSimulationState.robot.customSensors));
+                    if (key.startsWith('custom_')) {
+                        const idx = parseInt(key.replace('custom_', ''));
+                        if (sharedSimulationState.robot.customSensors && sharedSimulationState.robot.customSensors[idx]) {
+                            const csType = sharedSimulationState.robot.customSensors[idx].type;
+                            if (csType && csType.toLowerCase() === 'led' || csType === 'screen') {
+                                isLED = true;
+                            }
+                        }
+                    }
+                    if (isLED) {
+                        ledPins.push(pNum);
+                    } else {
+                        sensorPins.push(pNum);
+                    }
+                }
+            }
             const motorPins = Object.values(conns.motorPins).map(p => parseInt(p));
 
             if (sensorPins.includes(pin) && mode === arduinoAPI.OUTPUT) {
-                ArduinoSerial.println(`Advertencia: Pin ${pin} es un SENSOR en el editor, pero lo declaraste como OUTPUT.`);
+                ArduinoSerial.println(`Advertencia: Pin ${pin} es un SENSOR en el editor, pero lo declaraste como OUTPUT. (Debug: pNum=${pin} sensorPins=${JSON.stringify(sensorPins)} ledPins=${JSON.stringify(ledPins)} custSensors=${JSON.stringify(sharedSimulationState.robot.customSensors)} conns=${JSON.stringify(conns.sensorPins)})`);
+            }
+            if (ledPins.includes(pin) && mode === arduinoAPI.INPUT) {
+                ArduinoSerial.println(`Advertencia: Pin ${pin} es un LED en el editor, pero lo declaraste como INPUT.`);
             }
             if (motorPins.includes(pin) && mode === arduinoAPI.INPUT) {
                 ArduinoSerial.println(`Advertencia: Pin ${pin} es un MOTOR en el editor, pero lo declaraste como INPUT.`);
@@ -88,14 +120,6 @@ const arduinoAPI = {
         const conns = sharedSimulationState.robot.connections.sensorPins;
         // The user code pin might be A2 (which equates to 2 due to injected constants)
         // We match `pin` to the mapped value of whatever the user typed in the UI
-        // Since the UI might have "A2", and our API parses "A2" to 2, we need a helper:
-        const resolveUIPin = (uiVal) => {
-            if (typeof uiVal === 'string' && uiVal.startsWith('A')) {
-                const num = parseInt(uiVal.substring(1));
-                return 14 + num; // Map A0-A5 to 14-19
-            }
-            return parseInt(uiVal);
-        }
 
         if (_pinModes[pin] !== arduinoAPI.INPUT) {
             if (!_warnedPins.has(pin)) {
@@ -131,6 +155,20 @@ const arduinoAPI = {
         else if (pin === resolveUIPin(conns.centerLeft)) val = sharedSimulationState.robot.sensors.centerLeft;
         else if (pin === resolveUIPin(conns.centerRight)) val = sharedSimulationState.robot.sensors.centerRight;
 
+        // Dynamic mapped generic sensors and buttons
+        for (const [connKey, connVal] of Object.entries(conns)) {
+            if (connKey.startsWith('pinPanelBtn_')) {
+                const btnIdx = connKey.replace('pinPanelBtn_', '');
+                if (pin === resolveUIPin(connVal)) {
+                    val = sharedSimulationState.robot.sensors[`btn_${btnIdx}`] || 0;
+                }
+            } else if (connKey.startsWith('custom_')) {
+                if (pin === resolveUIPin(connVal)) {
+                    val = sharedSimulationState.robot.sensors[connKey] || 0;
+                }
+            }
+        }
+
         // Debug
         // ArduinoSerial.println(`digitalRead(${pin}) -> ${val} (left: ${resolveUIPin(conns.left)}, center: ${resolveUIPin(conns.center)}, right: ${resolveUIPin(conns.right)})`);
 
@@ -149,16 +187,20 @@ const arduinoAPI = {
             return;
         }
 
-        // Validate if this pin is actually connected to a motor in Robot Editor
+        // Validate if this pin is actually connected to a motor or LED in Robot Editor
+        let isLED = false;
+        let ledKey = null;
         if (sharedSimulationState && sharedSimulationState.robot && sharedSimulationState.robot.connections) {
             const motorPins = Object.values(sharedSimulationState.robot.connections.motorPins)
                 .filter(p => p !== 'VCC' && p !== 'GND')
                 .map(p => parseInt(p));
-            if (!motorPins.includes(pin)) {
-                if (!_warnedPins.has(pin + "_not_motor")) {
-                    ArduinoSerial.println(`Advertencia: analogWrite(${pin}) - El pin ${pin} no está conectado a ningún motor en el Editor de Robot.`);
-                    _warnedPins.add(pin + "_not_motor");
-                }
+            
+            for (const [key, p] of Object.entries(sharedSimulationState.robot.connections.sensorPins)) {
+                if (resolveUIPin(p) === pin && key.startsWith('custom_')) {
+                    const idx = parseInt(key.replace('custom_', ''));
+                    if (sharedSimulationState.robot.customSensors && sharedSimulationState.robot.customSensors[idx]) {
+                        const csType = sharedSimulationState.robot.customSensors[idx].type;
+                        if (csType && csType.toLowerCase() === 'led' || csType === 'screen') {
             }
         }
 
@@ -166,6 +208,11 @@ const arduinoAPI = {
 
         // Update the tracked PWM for the specific pin dynamically
         _motorPWMValues[pin] = pwmValue;
+        
+        // If it's an LED, update its state immediately
+        if (isLED && ledKey && sharedSimulationState.robot.sensors) {
+            sharedSimulationState.robot.sensors[ledKey] = pwmValue > 0 ? 1 : 0;
+        }
 
         if (sharedSimulationState && sharedSimulationState.robot && sharedSimulationState.robot.connections) {
             const conns = sharedSimulationState.robot.connections;

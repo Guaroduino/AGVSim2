@@ -10,6 +10,18 @@ let trackPartsImages = {}; // Cache for loaded track part images { 'fileName.png
 let selectedTrackPart = null; // { ...partInfo, image: ImageElement }
 let savedState = null;
 
+// New State for Interactives
+let interactiveElements = []; // { id, type, x, y, width, height, value, color }
+let selectedInteractiveElement = null;
+let currentToolMode = null; // 'rfid' | 'color' | 'hopper' | 'erase' | null
+
+// Drag state
+let isDraggingInteractive = false;
+let draggedElement = null;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let dragMoved = false;
+
 // Directions for connection logic
 const OPPOSITE_DIRECTIONS = { N: 'S', S: 'N', E: 'W', W: 'E' };
 const DIRECTIONS = [
@@ -175,15 +187,14 @@ export function initTrackEditor(appInterface) {
     }
 
     // Setup event listeners
+    setupInteractiveTools(elems);
     elems.trackGridSizeSelect.addEventListener('change', (e) => {
         const size = e.target.value.split('x');
         currentGridSize = { rows: parseInt(size[0]), cols: parseInt(size[1]) };
         setupGrid();
     });
 
-    elems.generateRandomTrackButton.addEventListener('click', () => {
-        generateRandomTrackWithRetry();
-    });
+    
 
     elems.exportTrackToSimulatorButton.addEventListener('click', () => {
         const trackValidation = validateTrack();
@@ -206,7 +217,9 @@ export function initTrackEditor(appInterface) {
     const clearTrackButton = document.getElementById('clearTrackButton');
     if (clearTrackButton) {
         clearTrackButton.addEventListener('click', () => {
-            if (confirm('¿Estás seguro de que quieres limpiar toda la pista?')) {
+            if (confirm('�Est�s seguro de que quieres limpiar toda la pista?')) {
+                interactiveElements = [];
+                selectedInteractiveElement = null;
                 setupGrid();
                 renderEditor();
             }
@@ -218,7 +231,66 @@ export function initTrackEditor(appInterface) {
         loadTrackDesign(event, elems.trackGridSizeSelect, elems.trackEditorTrackNameInput);
     });
 
+    editorCanvas.addEventListener('mousedown', (event) => {
+        const coords = getCanvasCoords(event);
+        if (!coords) return;
+        const { p_x, p_y } = coords;
+        
+        dragMoved = false;
+        
+        let found = null;
+        for(let i = interactiveElements.length-1; i>=0; i--) {
+            let e = interactiveElements[i];
+            if (p_x >= e.x && p_x <= e.x + e.width && p_y >= e.y && p_y <= e.y + e.height) {
+                found = e; break;
+            }
+        }
+
+        if (found && currentToolMode === 'move') { 
+            isDraggingInteractive = true;
+            draggedElement = found;
+            selectedInteractiveElement = found;
+            dragOffsetX = p_x - found.x;
+            dragOffsetY = p_y - found.y;
+            
+            const elems = getDOMElements();
+            if (elems) {
+                 if (elems.intSettWidth) elems.intSettWidth.value = found.width;
+                 if (elems.intSettLength) elems.intSettLength.value = found.height;
+                 if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
+                 if (elems.intSettColor) elems.intSettColor.value = found.color || '#0000ff';
+                 updateInteractiveUI(found.type, elems);
+            }
+        }
+    });
+
+    editorCanvas.addEventListener('mousemove', (event) => {
+        if (!isDraggingInteractive || !draggedElement) return;
+        const coords = getCanvasCoords(event);
+        if (!coords) return;
+        
+        draggedElement.x = coords.p_x - dragOffsetX;
+        draggedElement.y = coords.p_y - dragOffsetY;
+        dragMoved = true;
+        
+        renderEditor();
+    });
+
+    editorCanvas.addEventListener('mouseup', (event) => {
+        isDraggingInteractive = false;
+        draggedElement = null;
+    });
+
+    editorCanvas.addEventListener('mouseleave', (event) => {
+        isDraggingInteractive = false;
+        draggedElement = null;
+    });
+
     editorCanvas.addEventListener('click', (event) => {
+        if (dragMoved) {
+            dragMoved = false;
+            return; // Skip click logic if we just finished a drag
+        }
         onGridSingleClick(event);
     });
 
@@ -284,6 +356,7 @@ function populateTrackPartsPalette(paletteElement) {
 
     AVAILABLE_TRACK_PARTS.forEach(partInfo => {
         const imgContainer = document.createElement('div');
+        imgContainer.style.flexShrink = '0';
         const imgElement = trackPartsImages[partInfo.file]?.cloneNode() || new Image(70, 70); // Use cached image
 
         if (!trackPartsImages[partInfo.file]) {
@@ -390,12 +463,49 @@ function renderEditor(cellSize) {
         }
     }
 
+    drawInteractiveElements(ctx, cellSize / TRACK_PART_SIZE_PX);
+
     if (AVAILABLE_TRACK_PARTS.length === 0 && editorCanvas.width > 0) {
         ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.font = `bold ${Math.min(20, editorCanvas.width * 0.05)}px Arial`;
         ctx.textAlign = "center";
         ctx.fillText("No hay partes de pista en config.js", editorCanvas.width / 2, editorCanvas.height / 2);
     }
+}
+
+function getCanvasCoords(event) {
+    if (!editorCanvas) return null;
+    const rect = editorCanvas.getBoundingClientRect();
+    const renderWidth = rect.width;
+    const renderHeight = rect.height;
+    const canvasAspect = editorCanvas.width / editorCanvas.height;
+    const containerAspect = renderWidth / renderHeight;
+
+    let actualWidth, actualHeight, offsetX, offsetY;
+    if (containerAspect > canvasAspect) {
+        actualHeight = renderHeight;
+        actualWidth = renderHeight * canvasAspect;
+        offsetX = (renderWidth - actualWidth) / 2;
+        offsetY = 0;
+    } else {
+        actualWidth = renderWidth;
+        actualHeight = renderWidth / canvasAspect;
+        offsetX = 0;
+        offsetY = (renderHeight - actualHeight) / 2;
+    }
+
+    const x_relative = event.clientX - rect.left - offsetX;
+    const y_relative = event.clientY - rect.top - offsetY;
+
+    const scale = editorCanvas.width / actualWidth;
+    const x_canvas = x_relative * scale;
+    const y_canvas = y_relative * scale;
+
+    const exportScale = (currentGridSize.cols * TRACK_PART_SIZE_PX) / editorCanvas.width;
+    const p_x = x_canvas * exportScale;
+    const p_y = y_canvas * exportScale;
+
+    return { x_canvas, y_canvas, p_x, p_y };
 }
 
 function onGridSingleClick(event) {
@@ -432,6 +542,64 @@ function onGridSingleClick(event) {
     const scale = editorCanvas.width / actualWidth;
     const x_canvas = x_relative * scale;
     const y_canvas = y_relative * scale;
+
+    const exportScale = (currentGridSize.cols * TRACK_PART_SIZE_PX) / editorCanvas.width;
+    const p_x = x_canvas * exportScale;
+    const p_y = y_canvas * exportScale;
+
+    // --- INTERACTIVE ELEMENTS LOGIC --- 
+    if (currentToolMode && currentToolMode !== 'erase' && currentToolMode !== 'move' && (!event.detail || event.detail === 1)) {
+        const elems = getDOMElements();
+        let w = parseFloat(elems?.intSettWidth?.value) || 100;
+        let h = parseFloat(elems?.intSettLength?.value) || 100;
+        let val = parseInt(elems?.intSettValue?.value) || 0;
+        let col = elems?.intSettColor?.value || '#0000ff';
+
+        interactiveElements.push({
+            id: Date.now() + Math.floor(Math.random()*1000),
+            type: currentToolMode,
+            x: p_x - w/2, 
+            y: p_y - h/2,
+            width: w,
+            height: h,
+            value: val,
+            color: col,
+            rotation: 0
+        });
+
+        selectedInteractiveElement = interactiveElements[interactiveElements.length-1];
+        document.querySelectorAll('#trackPartsPalette img').forEach(p => p.classList.remove('selected'));
+        selectedTrackPart = null;
+
+        renderEditor();
+        return; 
+    }
+
+    if (currentToolMode === 'move' && (!event.detail || event.detail === 1)) {
+        let found = null;
+        for(let i = interactiveElements.length-1; i>=0; i--) {
+            let e = interactiveElements[i];
+            if (p_x >= e.x && p_x <= e.x + e.width && p_y >= e.y && p_y <= e.y + e.height) {
+                found = e; break;
+            }
+        }
+        if (found) {
+            selectedInteractiveElement = found;
+            const elems = getDOMElements();
+            if (elems) {
+                 if (elems.intSettWidth) elems.intSettWidth.value = found.width;
+                 if (elems.intSettLength) elems.intSettLength.value = found.height;
+                 if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
+                 if (elems.intSettColor) elems.intSettColor.value = found.color || '#0000ff';
+                 updateInteractiveUI(found.type, elems);
+            }
+            renderEditor();
+            return;
+        } else {
+            selectedInteractiveElement = null;
+        }
+    }
+    // --- FIN LOGICA INTERACTIVA ---
 
     // Calculate cell size dynamically
     const cellSize = editorCanvas.width / Math.max(currentGridSize.rows, currentGridSize.cols);
@@ -488,7 +656,35 @@ function onGridDoubleClick(event) {
     const x_canvas = x_relative * scale;
     const y_canvas = y_relative * scale;
 
-    // Calculate cell size dynamically
+    const exportScale = (currentGridSize.cols * TRACK_PART_SIZE_PX) / editorCanvas.width;
+    const p_x = x_canvas * exportScale;
+    const p_y = y_canvas * exportScale;
+
+    // Double click logic for interactive elements
+    let clickedElementIndex = -1;
+    for(let i = interactiveElements.length-1; i>=0; i--) {
+        let e = interactiveElements[i];
+        if (p_x >= e.x && p_x <= e.x + e.width && p_y >= e.y && p_y <= e.y + e.height) {
+            clickedElementIndex = i; break;
+        }
+    }
+
+    if (clickedElementIndex >= 0) {
+        if (currentToolMode === 'erase') {
+            if (selectedInteractiveElement && selectedInteractiveElement.id === interactiveElements[clickedElementIndex].id) {
+                selectedInteractiveElement = null;
+            }
+            interactiveElements.splice(clickedElementIndex, 1);
+        } else {
+            let el = interactiveElements[clickedElementIndex];
+            let rotationStep = (el.type === 'obstacle') ? 15 : 90;
+            el.rotation = ((el.rotation || 0) + rotationStep) % 360;
+        }
+        renderEditor();
+        return;
+    }
+
+    // Default double click rotation for tracks
     const cellSize = editorCanvas.width / Math.max(currentGridSize.rows, currentGridSize.cols);
 
     const c = Math.floor(x_canvas / cellSize);
@@ -866,6 +1062,85 @@ function loadTrackDesign(event, gridSizeSelect, trackNameInput) {
     event.target.value = null; // Reset file input
 }
 
+function drawInteractiveElements(targetCtx, scaleRatio) {
+    interactiveElements.forEach(el => {
+        targetCtx.save();
+        
+        // El.x and el.y are in TRACK_PART_SIZE_PX scale space
+        const x = el.x * scaleRatio;
+        const y = el.y * scaleRatio;
+        const w = el.width * scaleRatio;
+        const h = el.height * scaleRatio;
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        
+        targetCtx.translate(cx, cy);
+        if (el.rotation) {
+            targetCtx.rotate(el.rotation * Math.PI / 180);
+        }
+        
+        if (el.type === 'color') {
+            targetCtx.fillStyle = el.color || '#0000ff';
+            targetCtx.fillRect(-w/2, -h/2, w, h);
+            targetCtx.strokeStyle = 'white';
+            targetCtx.lineWidth = 2 * scaleRatio;
+            targetCtx.strokeRect(-w/2, -h/2, w, h);
+        } else if (el.type === 'rfid') {
+            targetCtx.fillStyle = 'rgba(200, 200, 200, 0.8)';
+            targetCtx.fillRect(-w/2, -h/2, w, h);
+            targetCtx.strokeStyle = '#333';
+            targetCtx.lineWidth = 2 * scaleRatio;
+            targetCtx.strokeRect(-w/2, -h/2, w, h);
+            targetCtx.fillStyle = 'black';
+            targetCtx.font = `${12 * scaleRatio}px Arial`;
+            targetCtx.textAlign = 'center';
+            targetCtx.textBaseline = 'middle';
+            targetCtx.fillText(`RFID:${el.value || 0}`, 0, 0);
+        } else if (el.type === 'hopper') {
+            targetCtx.fillStyle = 'rgba(139, 69, 19, 0.8)';
+            targetCtx.fillRect(-w/2, -h/2, w, h);
+            targetCtx.strokeStyle = '#fff';
+            targetCtx.lineWidth = 2 * scaleRatio;
+            targetCtx.beginPath();
+            targetCtx.moveTo(-w/2, -h/2);
+            targetCtx.lineTo(w/2, h/2);
+            targetCtx.moveTo(w/2, -h/2);
+            targetCtx.lineTo(-w/2, h/2);
+            targetCtx.stroke();
+        } else if (el.type === 'obstacle') {
+            targetCtx.fillStyle = '#444'; // Dark grey
+            targetCtx.fillRect(-w/2, -h/2, w, h);
+            targetCtx.strokeStyle = 'yellow'; // Yellow border
+            targetCtx.lineWidth = 3 * scaleRatio;
+            targetCtx.strokeRect(-w/2, -h/2, w, h);
+            
+            // Add stripes for texture
+            targetCtx.strokeStyle = 'yellow';
+            targetCtx.lineWidth = 2 * scaleRatio;
+            targetCtx.beginPath();
+            for (let i = -Math.max(w,h); i < Math.max(w,h) * 2; i += 15 * scaleRatio) {
+                targetCtx.moveTo(i, -h/2);
+                targetCtx.lineTo(i - h, h/2);
+            }
+            targetCtx.save();
+            targetCtx.beginPath();
+            targetCtx.rect(-w/2, -h/2, w, h);
+            targetCtx.clip();
+            targetCtx.stroke();
+            targetCtx.restore();
+        }
+
+        if (selectedInteractiveElement && selectedInteractiveElement.id === el.id) {
+            targetCtx.strokeStyle = 'cyan';
+            targetCtx.lineWidth = 3 * scaleRatio;
+            targetCtx.setLineDash([5 * scaleRatio, 5 * scaleRatio]);
+            targetCtx.strokeRect(-w/2 - 2*scaleRatio, -h/2 - 2*scaleRatio, w + 4*scaleRatio, h + 4*scaleRatio);
+            targetCtx.setLineDash([]);
+        }
+        targetCtx.restore();
+    });
+}
+
 function exportTrackAsCanvas() {
     if (currentGridSize.rows === 0 || currentGridSize.cols === 0) {
         alert("Tamaño de grid inválido para exportar.");
@@ -901,7 +1176,9 @@ function exportTrackAsCanvas() {
         }
     }
 
-    if (!hasContent) {
+    drawInteractiveElements(exportCtx, 1);
+
+    if (!hasContent && interactiveElements.length === 0) {
         alert("El editor de pistas está vacío. No hay nada para exportar.");
         return null;
     }
@@ -997,4 +1274,80 @@ function loadDefaultTrackDesign(gridSizeSelect, trackNameInput) {
             console.error("Error al cargar la pista por defecto:", error);
             alert("No se pudo cargar la pista por defecto. Revisa la consola.");
         });
+}
+
+function setupInteractiveTools(elems) {
+    const tools = [
+        { id: 'toolModeRFID', mode: 'rfid' },
+        { id: 'toolModeColor', mode: 'color' },
+        { id: 'toolModeHopper', mode: 'hopper' },
+        { id: 'toolModeObstacle', mode: 'obstacle' },
+        { id: 'toolModeMoveInt', mode: 'move' },
+        { id: 'toolModeEraseInt', mode: 'erase' }
+    ];
+    tools.forEach(t => {
+        const btn = document.getElementById(t.id);
+        if (btn) {
+            btn.addEventListener('click', () => {
+                const isActive = currentToolMode === t.mode;
+                currentToolMode = isActive ? null : t.mode;
+                
+                tools.forEach(other => {
+                    const ob = document.getElementById(other.id);
+                    if(ob) ob.style.boxShadow = '';
+                });
+                
+                if (!isActive) {
+                    btn.style.boxShadow = '0 0 0 2px var(--primary-color) inset';
+                }
+                
+                updateInteractiveUI(currentToolMode, elems);
+                
+                // Clear track part selection
+                document.querySelectorAll('#trackPartsPalette img').forEach(p => p.classList.remove('selected'));
+                selectedTrackPart = null;
+            });
+        }
+    });
+
+    if(elems.intSettWidth) elems.intSettWidth.addEventListener('input', updateSelectedInteractiveElement);
+    if(elems.intSettLength) elems.intSettLength.addEventListener('input', updateSelectedInteractiveElement);
+    if(elems.intSettValue) elems.intSettValue.addEventListener('input', updateSelectedInteractiveElement);
+    if(elems.intSettColor) elems.intSettColor.addEventListener('input', updateSelectedInteractiveElement);
+}
+
+function updateInteractiveUI(mode, elems) {
+    if (!elems) elems = getDOMElements();
+    if (!elems) return;
+    
+    if (mode === 'rfid') {
+        elems.lblIntVal.style.display = 'flex';
+        elems.lblIntColor.style.display = 'none';
+        elems.intSettValue.placeholder = 'UID...';
+    } else if (mode === 'color') {
+        elems.lblIntVal.style.display = 'none';
+        elems.lblIntColor.style.display = 'flex';
+    } else if (mode === 'hopper') {
+        elems.lblIntVal.style.display = 'flex';
+        elems.lblIntColor.style.display = 'flex';
+        elems.intSettValue.placeholder = 'Texto...';
+    } else if (mode === 'obstacle') {
+        elems.lblIntVal.style.display = 'none';
+        elems.lblIntColor.style.display = 'none';
+    } else {
+        elems.lblIntVal.style.display = 'none';
+        elems.lblIntColor.style.display = 'none';
+    }
+}
+
+function updateSelectedInteractiveElement() {
+    if(selectedInteractiveElement) {
+        const elems = getDOMElements();
+        if(!elems) return;
+        selectedInteractiveElement.width = parseFloat(elems.intSettWidth.value) || 50;
+        selectedInteractiveElement.height = parseFloat(elems.intSettLength.value) || 50;
+        selectedInteractiveElement.value = elems.intSettValue.value || '';
+        selectedInteractiveElement.color = elems.intSettColor.value || '#0000ff';
+        renderEditor();
+    }
 }

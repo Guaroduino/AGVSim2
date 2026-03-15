@@ -785,6 +785,69 @@ void loop() {
         }
     });
 
+    // Helper for Control Panel buttons
+    function checkPanelButtonClick(canvas, event) {
+        if (!simulationInstance || !simulationInstance.robot) return -1;
+        const geom = simulationInstance.robot.geometry || simulationInstance.robot;
+        const btns = geom.panelButtons;
+        if (!geom.panelScreen && (!btns || btns.length === 0)) return -1;
+        if (!btns || btns.length === 0) return -1;
+    
+        const rect = canvas.getBoundingClientRect();
+        
+        // Manejar object-fit: contain
+        const renderWidth = rect.width;
+        const renderHeight = rect.height;
+        const canvasAspect = canvas.width / canvas.height;
+        const containerAspect = renderWidth / renderHeight;
+    
+        let actualWidth, actualHeight, offsetX, offsetY;
+    
+        if (containerAspect > canvasAspect) {
+            actualHeight = renderHeight;
+            actualWidth = renderHeight * canvasAspect;
+            offsetX = (renderWidth - actualWidth) / 2;
+            offsetY = 0;
+        } else {
+            actualWidth = renderWidth;
+            actualHeight = renderWidth / canvasAspect;
+            offsetX = 0;
+            offsetY = (renderHeight - actualHeight) / 2;
+        }
+    
+        let clientX = event.clientX;
+        let clientY = event.clientY;
+        if(event.touches && event.touches.length > 0) {
+            clientX = event.touches[0].clientX;
+            clientY = event.touches[0].clientY;
+        }
+
+        let adjustedPx_x = (clientX - rect.left) - offsetX;
+        let adjustedPx_y = (clientY - rect.top) - offsetY;
+    
+        const x = adjustedPx_x * (canvas.width / actualWidth);
+        const y = adjustedPx_y * (canvas.height / actualHeight);
+    
+        const count = btns.length;
+        const startX = 50;
+        const endX = 140;
+        const step = (endX - startX) / (count + 1);
+    
+        for (let i=0; i<count; i++) {
+            const cx = 40 + startX + step * (i + 1);
+            const cy = canvas.height - 90 - 10;
+            const r = (btns[i].size || 8) / 2;
+    
+            const dx = x - cx;
+            const dy = y - cy;
+            // Pad hit area by a few pixels
+            if (dx*dx + dy*dy <= (r + 8) * (r + 8)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     // --- Mouse Events ---
     // Helper: usa la inversa de la matriz de cámara exacta capturada en draw() para máxima precisión
     function screenToWorld(event) {
@@ -806,6 +869,16 @@ void loop() {
     }
 
     elems.simulationDisplayCanvas.addEventListener('mousedown', (event) => {
+        const btnIdx = checkPanelButtonClick(elems.simulationDisplayCanvas, event);
+        if (btnIdx !== -1) {
+            simulationInstance.robot.sensors['btn_' + btnIdx] = 1;
+            // update UI immediately
+            if (!simulationInterval) {
+                simulationInstance.draw(elems.simulationDisplayCanvas.getContext('2d'), elems.simulationDisplayCanvas.width, elems.simulationDisplayCanvas.height);
+            }
+            return; // We consumed the click for a button
+        }
+        
         if (!isPlacingStartLineSim || !simulationInstance || !simulationInstance.track.imageData) return;
         startLineStartPoint = screenToWorld(event);
     });
@@ -842,7 +915,25 @@ void loop() {
         ctx.restore();
     });
 
+    // Mouse up general handler to release all panel buttons
+    const releaseAllPanelButtons = () => {
+        if (simulationInstance && simulationInstance.robot) {
+            let redraw = false;
+            for (let i = 0; i < 10; i++) {
+                if (simulationInstance.robot.sensors['btn_' + i] === 1) {
+                    simulationInstance.robot.sensors['btn_' + i] = 0;
+                    redraw = true;
+                }
+            }
+            if (redraw && !simulationInterval) {
+                simulationInstance.draw(elems.simulationDisplayCanvas.getContext('2d'), elems.simulationDisplayCanvas.width, elems.simulationDisplayCanvas.height);
+            }
+        }
+    };
+
     elems.simulationDisplayCanvas.addEventListener('mouseup', (event) => {
+        releaseAllPanelButtons();
+        
         if (!isPlacingStartLineSim || !startLineStartPoint || !simulationInstance || !simulationInstance.track.imageData) return;
 
         const world = screenToWorld(event);
@@ -885,6 +976,18 @@ void loop() {
 
     // --- Touch Events for Mobile ---
     elems.simulationDisplayCanvas.addEventListener('touchstart', (event) => {
+        if (event.touches.length > 0) {
+            const btnIdx = checkPanelButtonClick(elems.simulationDisplayCanvas, event);
+            if (btnIdx !== -1) {
+                simulationInstance.robot.sensors['btn_' + btnIdx] = 1;
+                if (!simulationInterval) {
+                    simulationInstance.draw(elems.simulationDisplayCanvas.getContext('2d'), elems.simulationDisplayCanvas.width, elems.simulationDisplayCanvas.height);
+                }
+                event.preventDefault(); // We consumed the touch for a button
+                return;
+            }
+        }
+        
         if (!isPlacingStartLineSim || !simulationInstance || !simulationInstance.track.imageData) return;
         if (event.touches.length !== 1) return;
 
@@ -930,6 +1033,7 @@ void loop() {
     }, { passive: false });
 
     elems.simulationDisplayCanvas.addEventListener('touchend', (event) => {
+        releaseAllPanelButtons();
         if (!isPlacingStartLineSim || !startLineStartPoint || !simulationInstance || !simulationInstance.track.imageData) return;
 
         const world = screenToWorld(event);

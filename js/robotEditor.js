@@ -157,7 +157,7 @@ export function initRobotEditor(appInterface) {
             allPins = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 'A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
         } else if (board === 'mega') {
             pwmPins = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 44, 45, 46]; // Common PWMs on MEGA
-            for(let i=2; i<=53; i++) allPins.push(i);
+            for(let i=0; i<=53; i++) allPins.push(i);
             for(let i=0; i<=15; i++) allPins.push(`A${i}`);
         }
 
@@ -459,10 +459,28 @@ export function initRobotEditor(appInterface) {
             if (window.renderCustomSensorsList) {
                 window.renderCustomSensorsList();
             }
+            if (window.renderPanelConfig) {
+                window.renderPanelConfig();
+            }
         });
     }
 
     // --- Custom Sensors Logic ---
+    const panelT = document.getElementById('panelScreenToggle');
+    if (panelT) {
+        panelT.addEventListener('change', () => {
+            if(window.renderPanelConfig) window.renderPanelConfig();
+            window.forceGeometrySync();
+        });
+    }
+    const panelC = document.getElementById('panelButtonCount');
+    if (panelC) {
+        panelC.addEventListener('change', () => {
+            if(window.renderPanelConfig) window.renderPanelConfig();
+            window.forceGeometrySync();
+        });
+    }
+
     if (elems.horizontalSymmetryToggle) {
         elems.horizontalSymmetryToggle.addEventListener('change', (e) => {
             const isSym = e.target.checked;
@@ -482,6 +500,49 @@ export function initRobotEditor(appInterface) {
             window.forceGeometrySync();
         });
     }
+
+    window.getPanelButtonsState = function() {
+        let btns = [];
+        const count = parseInt(document.getElementById('panelButtonCount')?.value || 0);
+        for(let i=0; i<count; i++) {
+            btns.push({
+                color: document.getElementById('panelBtnColor_'+i)?.value || '#ff0000',
+                size: parseInt(document.getElementById('panelBtnSize_'+i)?.value || 8)
+            });
+        }
+        return btns;
+    };
+
+    window.renderPanelConfig = function() {
+        const configDiv = document.getElementById('panelButtonsConfig');
+        if (!configDiv) return;
+        const isScreen = document.getElementById('panelScreenToggle')?.checked;
+        const count = parseInt(document.getElementById('panelButtonCount')?.value || 0);
+        
+        let html = '';
+        if (isScreen) {
+            html += '<div class=\"pin-row\" style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Pin Pantalla (SDA):</span>'+pinSelect('pinPanelScreen_SDA', 'A4')+'</div>';
+            html += '<div class=\"pin-row\" style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Pin Pantalla (SCL):</span>'+pinSelect('pinPanelScreen_SCL', 'A5')+'</div>';
+        }
+        for(let i=0; i<count; i++) {
+            const c = currentGeometry && currentGeometry.panelButtons && currentGeometry.panelButtons[i] ? currentGeometry.panelButtons[i].color : '#ff0000';
+            const s = currentGeometry && currentGeometry.panelButtons && currentGeometry.panelButtons[i] ? currentGeometry.panelButtons[i].size : 12;
+            html += '<div style=\"background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.1); padding: 8px; margin-bottom: 5px; border-radius:4px;\">';
+            html += '<div style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Color Botón '+(i+1)+':</span><input type=\"color\" id=\"panelBtnColor_'+i+'\" value=\"'+c+'\" onchange=\"window.forceGeometrySync()\"></div>';
+            html += '<div style=\"display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;\"><span>Tamaño '+(i+1)+':</span><input type=\"number\" style=\"width:60px;\" id=\"panelBtnSize_'+i+'\" value=\"'+s+'\" min=\"4\" max=\"20\" onchange=\"window.forceGeometrySync()\"></div>';
+            html += '<div class=\"pin-row\" style=\"display:flex; justify-content:space-between; align-items:center;\"><span>Pin Botón '+(i+1)+':</span>'+pinSelect('pinPanelBtn_'+i, '')+'</div>';
+            html += '</div>';
+        }
+        configDiv.innerHTML = html;
+        
+        configDiv.querySelectorAll('select').forEach(sel => {
+            sel.addEventListener('change', window.forceGeometrySync);
+            if(currentGeometry && currentGeometry.connections && currentGeometry.connections.sensorPins) {
+                const val = currentGeometry.connections.sensorPins[sel.id];
+                if(val) sel.value = val;
+            }
+        });
+    };
 
     window.renderCustomSensorsList = function() {
         const elems = getDOMElements();
@@ -985,6 +1046,15 @@ function getFormValues() {
         motorPins: motorPins
     };
 
+    if (document.getElementById('panelScreenToggle')?.checked) {
+        connections.sensorPins['pinPanelScreen_SDA'] = document.getElementById('pinPanelScreen_SDA')?.value || '';
+        connections.sensorPins['pinPanelScreen_SCL'] = document.getElementById('pinPanelScreen_SCL')?.value || '';
+    }
+    const panelBtnCount = parseInt(document.getElementById('panelButtonCount')?.value || 0);
+    for (let i = 0; i < panelBtnCount; i++) {
+        connections.sensorPins[`pinPanelBtn_${i}`] = document.getElementById(`pinPanelBtn_${i}`)?.value || '';
+    }
+
     const sym = elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false;
     
     if (sym) {
@@ -1056,6 +1126,8 @@ function getFormValues() {
         comOffset_m: elems.comOffsetInput ? (parseFloat(elems.comOffsetInput.value) / 1000) : DEFAULT_ROBOT_GEOMETRY.comOffset_m,
         tireGrip: elems.tireGripInput ? parseFloat(elems.tireGripInput.value) : DEFAULT_ROBOT_GEOMETRY.tireGrip,
         customWheels: currentGeometry ? currentGeometry.customWheels : null,
+        panelScreen: document.getElementById('panelScreenToggle')?.checked || false,
+        panelButtons: typeof window.getPanelButtonsState === 'function' ? window.getPanelButtonsState() : [],
         customSensors: currentGeometry ? currentGeometry.customSensors : null,
         connections: connections,
         horizontalSymmetry: elems.horizontalSymmetryToggle ? elems.horizontalSymmetryToggle.checked : false
@@ -1073,6 +1145,13 @@ function setFormValues(geometry) {
     elems.sensorSpreadInput.placeholder = 'Separación sensores (mm)';
     elems.sensorDiameterInput.value = (geometry.sensorDiameter_m * 1000).toFixed(1);
     elems.sensorDiameterInput.placeholder = 'Diámetro de detección (mm)';
+
+    const pt = document.getElementById('panelScreenToggle');
+    if (pt) pt.checked = !!geometry.panelScreen;
+    const ptC = document.getElementById('panelButtonCount');
+    if (ptC) ptC.value = geometry.panelButtons ? geometry.panelButtons.length : 0;
+    if (typeof window.renderPanelConfig === 'function') window.renderPanelConfig();
+
     if (elems.sensorCountSelect && geometry.sensorCount) {
         elems.sensorCountSelect.value = geometry.sensorCount;
     }

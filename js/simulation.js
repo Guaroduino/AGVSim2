@@ -368,6 +368,7 @@ export class Simulation {
             
             let physicsRadiusPx = defaultSensorRadiusPx;
             
+            let isOutputSensor = false;
             if (key.startsWith('custom_')) {
                 physicsRadiusPx = Math.max(2, 0.005 * PIXELS_PER_METER); // 10mm fixed for custom
                 let cleanKey = key;
@@ -379,20 +380,25 @@ export class Simulation {
                     if (cSens.detectionDiameter) {
                         physicsRadiusPx = Math.max(1, (parseFloat(cSens.detectionDiameter) / 1000 / 2) * PIXELS_PER_METER);
                     }
-                    if (cSens.type === 'tof' || cSens.type === 'rgb' || cSens.type === 'rfid' || cSens.type === 'led') {
+                    if (cSens.type === 'tof' || cSens.type === 'rgb' || cSens.type === 'rfid' || cSens.type === 'led' || cSens.type === 'screen') {
+                        if (cSens.type === 'led' || cSens.type === 'screen') {
+                            isOutputSensor = true;
+                        }
                         // These don't directly read the line, but we can set their physics radius to be bounding-box-ish or skip. We keep line detection output anyway just in case users use it, using a fixed 2px radius as fallback if not IR.
                         if (cSens.type !== 'ir') physicsRadiusPx = 2;
                     }
                 }
             }
 
-            let onLine = this.track.isAreaOnLine(px, py, physicsRadiusPx);
-            // Apply sensor noise if enabled
-            if (this.params.sensorNoiseProb > 0 && Math.random() < this.params.sensorNoiseProb) {
-                onLine = !onLine;
+            if (!isOutputSensor) {
+                let onLine = this.track.isAreaOnLine(px, py, physicsRadiusPx);
+                // Apply sensor noise if enabled
+                if (this.params.sensorNoiseProb > 0 && Math.random() < this.params.sensorNoiseProb) {
+                    onLine = !onLine;
+                }
+                // 1 = on line (HIGH), 0 = off line (LOW)
+                this.robot.sensors[key] = onLine ? 1 : 0;
             }
-            // 1 = on line (HIGH), 0 = off line (LOW)
-            this.robot.sensors[key] = onLine ? 1 : 0;
         }
     }
 

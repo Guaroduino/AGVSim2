@@ -987,12 +987,34 @@ delay(5);
                     </label>
 
                     <div style="margin-top: 10px;">
-                        <label for="arduinoBoardSelect" style="font-weight: bold; display: block; margin-bottom: 5px;">Placa Arduino:</label>
+                        <div style="border: 1px solid var(--border-color); padding: 10px; margin-bottom: 15px; border-radius: 5px; background: rgba(0,0,0,0.02);">
+<div style="font-weight: bold; margin-bottom: 8px;">Panel de Control:</div>
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+    <label style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;">
+        <span>Pantalla (OLED):</span>
+        <input type="checkbox" id="panelScreenToggle" style="width: auto; margin: 0; cursor: pointer;">
+    </label>
+    <label style="display: flex; align-items: center; gap: 8px; margin: 0;">
+        <span>Nro. Botones:</span>
+        <select id="panelButtonCount" style="width: auto; margin: 0;">
+            <option value="0" selected>0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+        </select>
+    </label>
+</div>
+<div id="panelButtonsConfig" style="margin-top:10px;"></div>
+</div>
+
+                          <label for="arduinoBoardSelect" style="font-weight: bold; display: block; margin-bottom: 5px;">Placa Arduino:</label>
                         <select id="arduinoBoardSelect" style="width: 100%; margin-bottom: 10px; padding: 5px;">
                             <option value="uno">Arduino UNO / NANO</option>
                             <option value="mega">Arduino MEGA 2560</option>
                         </select>
 
+                        <div style="font-weight: bold; margin-bottom: 5px;">Otros Componentes:</div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5em; margin-bottom: 0.5em;">
                             <button id="addCustomSensorBtn" style="padding: 0.4em; font-size:0.8em;">+ IR Custom</button>
                             <button id="addLEDBtn" style="padding: 0.4em; font-size:0.8em;" title="Añadir LED">+ LED</button>
@@ -1304,16 +1326,10 @@ delay(5);
                                 <option value="4x4" selected>4x4</option>
                                 <option value="5x5">5x5</option>
                             </select>
-                            <label for="trackModeDropdown" style="font-size: 0.8em; margin-left: 0.5em;">Cat:</label>
-                            <select id="trackModeDropdown" style="padding: 0.2em; font-size: 0.8em; width: auto;">
-                                <option value="aventura">Aventura</option>
-                                <option value="desafio">Desafío</option>
-                                <option value="innovacion">Innovación</option>
-                            </select>
+                            
                         </div>
                         <div style="display: flex; gap: 0.3em; align-items: center; flex-wrap: wrap;">
-                            <button id="generateRandomTrack"
-                                style="flex:1; padding: 0.4em 0.5em; min-height: 0; font-size: 0.8em;">Aleatoria</button>
+                            
                             <button id="exportTrackToSimulator"
                                 style="flex:1; padding: 0.4em 0.5em; min-height: 0; font-size: 0.8em; background-color: #4CAF50; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer;">Cargar Pista en Simulador</button>
                             <button id="clearTrackButton" class="danger"
@@ -1350,19 +1366,25 @@ delay(5);
                     <div
                         style="flex: 1.5; min-width: 250px; background: var(--surface-color); padding: 0.8em; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column;">
                         <strong style="font-size: 0.9em; margin-bottom: 0.5em;">Elementos Interactivos</strong>
-                        <div style="display: flex; gap: 0.3em; flex-wrap: wrap;">
-                            <button id="toolModeTrack" style="flex:1; padding: 0.3em; font-size: 0.8em; background-color: var(--primary-color); color: white; border-radius: 4px;">Pistas</button>
+                        <div style="display: flex; gap: 0.3em; flex-wrap: wrap; margin-bottom: 0.3em;">
                             <button id="toolModeRFID" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">RFID</button>
                             <button id="toolModeColor" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Color</button>
                             <button id="toolModeHopper" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Tolva</button>
+                            <button id="toolModeObstacle" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Obstáculo</button>
+                        </div>
+                        <div style="display: flex; gap: 0.3em; flex-wrap: wrap;">
+                            <button id="toolModeMoveInt" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Mover</button>
                             <button id="toolModeEraseInt" class="danger" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Borrar</button>
                         </div>
-                        <div id="interactiveSettings" style="margin-top: 0.5em; padding-top: 0.5em; border-top: 1px solid var(--border-color); display: flex; gap: 0.5em; align-items: center;">
-                            <span id="intSettLabel" style="font-size:0.8em; min-width:60px;">ID / Color:</span>
-                            <input type="text" id="intSettValue" style="flex:1; font-size:0.8em; padding:0.2em;" placeholder="Valor...">
-                            <label id="intHopperLabel" style="font-size:0.8em; display:none; align-items:center; gap:0.2em;">
-                                Impacto <input type="checkbox" id="intSettImpact" style="margin:0;">
-                            </label>
+                        <div id="interactiveSettings" style="margin-top: 0.5em; padding-top: 0.5em; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.5em; font-size: 0.8em;">
+                            <div style="display: flex; gap: 0.5em; align-items: center;">
+                                <label style="display:flex; align-items:center; gap: 2px;">Ancho: <input type="number" id="intSettWidth" value="100" style="width: 50px; padding: 0.2em;"></label>
+                                <label style="display:flex; align-items:center; gap: 2px;">Largo: <input type="number" id="intSettLength" value="100" style="width: 50px; padding: 0.2em;"></label>
+                            </div>
+                            <div style="display: flex; gap: 0.5em; align-items: center;">
+                                <label id="lblIntVal" style="display:none; align-items:center; gap: 2px;">Valor: <input type="text" id="intSettValue" style="flex:1; padding: 0.2em;" placeholder="Texto..."></label>
+                                <label id="lblIntColor" style="display:none; align-items:center; gap: 2px;">Color: <input type="color" id="intSettColor" value="#0000ff" style="padding: 0;"></label>
+                            </div>
                         </div>
                     </div>
                 </div>

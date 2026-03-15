@@ -752,14 +752,7 @@ body input[type="reset"]:disabled {
     background-color: var(--surface-color);
 }
 
-#trackPartsPalette {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-    gap: var(--spacing-xs);
-    max-height: 200px;
-    overflow-y: auto;
-    padding: var(--spacing-xs);
-}
+
 
 #trackPartsPalette img {
     width: 100%;
@@ -788,10 +781,7 @@ body input[type="reset"]:disabled {
         padding: var(--spacing-xs);
     }
 
-    #trackPartsPalette {
-        grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
-        max-height: 150px;
-    }
+    
 
     .track-editor-controls,
     .track-parts-palette-container {

@@ -135,6 +135,10 @@ export class Robot {
         // Asignar sensores customizados
         this.customSensors = geometry.customSensors || null;
 
+        // Asignar panel
+        this.panelScreen = geometry.panelScreen || false;
+        this.panelButtons = geometry.panelButtons || [];
+
         // Asignar simetría 
         this.horizontalSymmetry = geometry.horizontalSymmetry || false;
 
@@ -488,7 +492,89 @@ export class Robot {
             });
         }
 
+        const geom = this.geometry || this;
+        const hasScreen = geom.panelScreen;
+        const hasBtns = geom.panelButtons && geom.panelButtons.length > 0;
+        
         ctx.restore(); // <-- End robot-local transform
+
+        // Draw Control Panel on the bottom-left corner of the screen
+        if (hasScreen || hasBtns) {
+            ctx.save();
+            // Reset to screen coordinates
+            ctx.resetTransform();
+            
+            // Move to bottom-left corner with some padding
+            ctx.translate(40, ctx.canvas.height - 90);
+
+            // Draw horizontal panel instead of upright
+            ctx.fillStyle = 'rgba(40, 40, 40, 0.8)';
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 1.5;
+            ctx.fillRect(-20, -50, 180, 80);
+            ctx.strokeRect(-20, -50, 180, 80);
+
+            if (hasScreen) {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(-10, -40, 60, 60);
+
+                ctx.fillStyle = 'cyan';
+                ctx.font = '14px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText("OLED", 20, -10);
+            }
+
+            if (hasBtns) {
+                const btns = geom.panelButtons;
+                const count = btns.length;
+                const startX = 50;
+                const endX = 140;
+                const step = (endX - startX) / (count + 1);
+
+                for(let i=0; i<count; i++) {
+                    const btn = btns[i];
+                    const cx = startX + step * (i + 1);
+                    const cy = -10;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, (btn.size || 8) / 2, 0, Math.PI * 2);
+                    
+                    const isPressed = this.sensors[`btn_${i}`] === 1;
+                    if (isPressed) {
+                        ctx.fillStyle = '#ffffff';
+                    } else {
+                        ctx.fillStyle = btn.color || '#ff0000';
+                    }
+                    
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    if (isPressed) {
+                        ctx.strokeStyle = '#888';
+                        ctx.lineWidth = 2;
+                    } else {
+                        ctx.lineWidth = 1;
+                    }
+                    ctx.stroke();
+
+                    // Draw pin number
+                    let pinNum = "";
+                    if (geom.connections && geom.connections.sensorPins) {
+                        pinNum = geom.connections.sensorPins[`pinPanelBtn_${i}`] || "";
+                    }
+                    if (pinNum) {
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 10px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.shadowColor = "black";
+                        ctx.shadowBlur = 3;
+                        ctx.fillText(pinNum, cx, cy);
+                        ctx.shadowBlur = 0; // reset
+                    }
+                }
+            }
+            ctx.restore();
+        }
 
         // Draw Trails (world space)
         const drawTrail = (trail, color, lineWidth) => {
@@ -533,6 +619,7 @@ export class Robot {
               let isLED = false;
               let isRGB = false;
               let isRFID = false;
+              let isScreen = false;
               let ledColor = '#ff0000';
               let customIdx = -1;
               let tofIdx = -1;
@@ -582,6 +669,10 @@ export class Robot {
                       if (cSens.type === 'led') {
                           isLED = true;
                           ledColor = cSens.color || '#ff0000';
+                      }
+                      if (cSens.type === 'screen') {
+                          isScreen = true;
+                          customIdx = idx;
                       }
                   }
               }
@@ -681,6 +772,23 @@ export class Robot {
                   ctx.textAlign = 'center';
                   ctx.textBaseline = 'middle';
                   ctx.fillText(`${isRGB ? 'Color' : 'RFID'}${(customIdx + 1)}`, 0, 0);
+                  ctx.restore();
+
+              } else if (isScreen) {
+                  const sw = 40;
+                  const sh = 30;
+                  ctx.fillStyle = 'black';
+                  ctx.strokeStyle = '#cccccc';
+                  ctx.lineWidth = 2;
+                  ctx.fillRect(-sw/2, -sh/2, sw, sh);
+                  ctx.strokeRect(-sw/2, -sh/2, sw, sh);
+
+                  ctx.save();
+                  ctx.fillStyle = 'white';
+                  ctx.font = '8px monospace';
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillText(`OLED`, 0, 0);
                   ctx.restore();
 
               } else {

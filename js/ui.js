@@ -118,11 +118,15 @@ export function getDOMElements() {
         toolModeRFID: document.getElementById('toolModeRFID'),
         toolModeColor: document.getElementById('toolModeColor'),
         toolModeHopper: document.getElementById('toolModeHopper'),
+        toolModeObstacle: document.getElementById('toolModeObstacle'),
+        toolModeMoveInt: document.getElementById('toolModeMoveInt'),
         toolModeEraseInt: document.getElementById('toolModeEraseInt'),
-        intSettLabel: document.getElementById('intSettLabel'),
+        intSettWidth: document.getElementById('intSettWidth'),
+        intSettLength: document.getElementById('intSettLength'),
+        lblIntVal: document.getElementById('lblIntVal'),
         intSettValue: document.getElementById('intSettValue'),
-        intHopperLabel: document.getElementById('intHopperLabel'),
-        intSettImpact: document.getElementById('intSettImpact')
+        lblIntColor: document.getElementById('lblIntColor'),
+        intSettColor: document.getElementById('intSettColor')
     };
 }
 
