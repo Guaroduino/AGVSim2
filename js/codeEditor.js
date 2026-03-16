@@ -653,6 +653,8 @@ function traducirArduinoAJS(codigoArduino) {
         .replace(/\bconst\s+String\s+(\w+)\s*=\s*/g, 'const $1 = ')
         .replace(/\bString\s+(\w+)\s*=\s*/g, 'let $1 = ')
         .replace(/\bString\s+(\w+)\s*;/g, 'let $1;')
+        // Compat Arduino String: texto.length() -> texto.length
+        .replace(/\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\.\s*length\s*\(\s*\)/g, '$1.length')
         // Reto de punteros: tcs.getRawData(&r,&g,&b,&c) -> destructuring assignment JS
         .replace(/\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\.\s*getRawData\s*\(\s*&\s*([A-Za-z_]\w*)\s*,\s*&\s*([A-Za-z_]\w*)\s*,\s*&\s*([A-Za-z_]\w*)\s*,\s*&\s*([A-Za-z_]\w*)\s*\)\s*;?/g, '({ r: $2, g: $3, b: $4, c: $5 } = $1.getRawData());')
         // Elimina Serial.begin(...)

@@ -88,7 +88,17 @@ export class Track {
             this.offscreenCtx.drawImage(sourceCanvas, 0, 0, this.width_px, this.height_px);
 
             try {
-                this.imageData = this.offscreenCtx.getImageData(0, 0, this.width_px, this.height_px);
+                // If provided by the editor export, use a line-only mask for sensor sampling.
+                // This prevents IR sensors from reacting to interactive overlays.
+                const lineMaskCanvas = sourceCanvas.__lineMaskCanvas;
+                if (lineMaskCanvas instanceof HTMLCanvasElement &&
+                    lineMaskCanvas.width === this.width_px &&
+                    lineMaskCanvas.height === this.height_px) {
+                    const maskCtx = lineMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    this.imageData = maskCtx.getImageData(0, 0, this.width_px, this.height_px);
+                } else {
+                    this.imageData = this.offscreenCtx.getImageData(0, 0, this.width_px, this.height_px);
+                }
                 this.image.src = sourceCanvas.toDataURL(); // Keep an Image object too for consistency
                 resolve(true);
             } catch (e) {

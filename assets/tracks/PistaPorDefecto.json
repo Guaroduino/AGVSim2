@@ -1,62 +1,244 @@
 {
   "gridSize": {
     "rows": 3,
-    "cols": 3
+    "cols": 6
   },
   "gridParts": [
     {
       "r": 0,
       "c": 0,
-      "partFile": "C1.03-CCS.png",
+      "partFile": "C1.02-MCS.png",
+      "rotation": 0
+    },
+    {
+      "r": 0,
+      "c": 1,
+      "partFile": "C2.10-RDS.png",
+      "rotation": 90
+    },
+    {
+      "r": 0,
+      "c": 2,
+      "partFile": "C1.01-RCS.png",
+      "rotation": 90
+    },
+    {
+      "r": 0,
+      "c": 3,
+      "partFile": "C1.01-RCS.png",
       "rotation": 270
     },
     {
       "r": 0,
-      "c": 1,
+      "c": 4,
       "partFile": "C1.01-RCS.png",
       "rotation": 90
     },
     {
       "r": 0,
-      "c": 2,
-      "partFile": "C1.03-CCS.png",
-      "rotation": 0
+      "c": 5,
+      "partFile": "C1.02-MCS.png",
+      "rotation": 90
     },
     {
       "r": 1,
       "c": 0,
-      "partFile": "C1.01-RCS.png",
-      "rotation": 180
+      "partFile": "C1.02-MCS.png",
+      "rotation": 270
     },
     {
       "r": 1,
       "c": 1,
+      "partFile": "C3.13-RCI.png",
+      "rotation": 90
+    },
+    {
+      "r": 1,
+      "c": 2,
+      "partFile": "C3.13-RCI.png",
+      "rotation": 90
+    },
+    {
+      "r": 1,
+      "c": 3,
+      "partFile": "C3.13-RCI.png",
+      "rotation": 90
+    },
+    {
+      "r": 1,
+      "c": 4,
+      "partFile": "C3.13-RCI.png",
+      "rotation": 90
+    },
+    {
+      "r": 1,
+      "c": 5,
+      "partFile": "C1.02-MCS.png",
+      "rotation": 180
+    },
+    {
+      "r": 2,
+      "c": 1,
+      "partFile": "C3.16-MCI.png",
+      "rotation": 180
+    },
+    {
+      "r": 2,
+      "c": 2,
+      "partFile": "C3.16-MCI.png",
+      "rotation": 180
+    },
+    {
+      "r": 2,
+      "c": 3,
+      "partFile": "C3.16-MCI.png",
+      "rotation": 180
+    },
+    {
+      "r": 2,
+      "c": 4,
+      "partFile": "C3.16-MCI.png",
+      "rotation": 180
+    },
+    {
+      "r": 2,
+      "c": 5,
       "partFile": "C0.00-BCS.png",
       "rotation": 0
-    },
+    }
+  ],
+  "interactiveElements": [
     {
-      "r": 1,
-      "c": 2,
-      "partFile": "C1.01-RCS.png",
+      "id": 1773617295289,
+      "type": "hopper",
+      "x": 847.1368128022906,
+      "y": 499.51567917345164,
+      "width": 100,
+      "height": 100,
+      "value": "",
+      "color": "#0000ff",
       "rotation": 0
     },
     {
-      "r": 2,
-      "c": 0,
-      "partFile": "C1.03-CCS.png",
-      "rotation": 180
+      "id": 1773617303937,
+      "type": "hopper",
+      "x": 648.7434975503636,
+      "y": 498.9849448030237,
+      "width": 100,
+      "height": 100,
+      "value": "",
+      "color": "#0000ff",
+      "rotation": 0
     },
     {
-      "r": 2,
-      "c": 1,
-      "partFile": "C1.01-RCS.png",
-      "rotation": 90
+      "id": 1773617310877,
+      "type": "hopper",
+      "x": 449.2871049974526,
+      "y": 502.69847683589035,
+      "width": 100,
+      "height": 100,
+      "value": "",
+      "color": "#0000ff",
+      "rotation": 0
     },
     {
-      "r": 2,
-      "c": 2,
-      "partFile": "C1.03-CCS.png",
-      "rotation": 90
+      "id": 1773617316164,
+      "type": "hopper",
+      "x": 248.77085226381433,
+      "y": 499.51567917345153,
+      "width": 100,
+      "height": 100,
+      "value": "",
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617368930,
+      "type": "rfid",
+      "x": 886.1785082182521,
+      "y": 267.05565073962026,
+      "width": 30,
+      "height": 30,
+      "value": "04:D7:05:0A",
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617371721,
+      "type": "rfid",
+      "x": 684.803357731091,
+      "y": 266.5524381277117,
+      "width": 30,
+      "height": 30,
+      "value": "04:A0:A2:D5",
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617374684,
+      "type": "rfid",
+      "x": 486.37115104334646,
+      "y": 267.4113358812343,
+      "width": 30,
+      "height": 30,
+      "value": "04:89:21:F8",
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617377586,
+      "type": "rfid",
+      "x": 286.22114884855637,
+      "y": 267.0450853423861,
+      "width": 30,
+      "height": 30,
+      "value": "04:79:89:FA",
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617384668,
+      "type": "rfid",
+      "x": 585.4041291177946,
+      "y": 99.60783650276613,
+      "width": 30,
+      "height": 30,
+      "value": "04:15:90:78",
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617398989,
+      "type": "rfid",
+      "x": 1087.427262029587,
+      "y": 182.3476362375423,
+      "width": 30,
+      "height": 30,
+      "value": "04:6E:3B:3F",
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617469737,
+      "type": "obstacle",
+      "x": 1065.5704919378088,
+      "y": 458.19707746246945,
+      "width": 100,
+      "height": 100,
+      "value": 0,
+      "color": "#0000ff",
+      "rotation": 0
+    },
+    {
+      "id": 1773617477857,
+      "type": "obstacle",
+      "x": 26.3925946401789,
+      "y": 465.62735864845854,
+      "width": 100,
+      "height": 100,
+      "value": 0,
+      "color": "#0000ff",
+      "rotation": 0
     }
   ],
   "trackName": "MiPistaEditada"

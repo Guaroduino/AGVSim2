@@ -507,20 +507,22 @@ export class Robot {
             ctx.save();
             // Reset to screen coordinates
             ctx.resetTransform();
-            
-            // Move to bottom-left corner with some padding
-            ctx.translate(40, ctx.canvas.height - 90);
 
-            // Draw horizontal panel instead of upright
+            const panelWidth = 180;
+            const panelHeight = 80;
+            const panelX = 16;
+            const panelY = ctx.canvas.height - panelHeight - 14;
+
+            // Draw horizontal panel anchored to lower-left corner
             ctx.fillStyle = 'rgba(40, 40, 40, 0.8)';
             ctx.strokeStyle = '#888';
             ctx.lineWidth = 1.5;
-            ctx.fillRect(-20, -50, 180, 80);
-            ctx.strokeRect(-20, -50, 180, 80);
+            ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+            ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
 
             if (hasScreen) {
                 ctx.fillStyle = 'black';
-                ctx.fillRect(-10, -40, 60, 60);
+                ctx.fillRect(panelX + 10, panelY + 10, 60, 60);
 
                 ctx.fillStyle = 'cyan';
                 ctx.font = '8px monospace';
@@ -529,21 +531,21 @@ export class Robot {
                 const panelText = this.oledDisplays?.panel?.text || this.oledDisplays?.__last?.text || '';
                 const lines = String(panelText).split('\n').slice(0, 6);
                 lines.forEach((line, i) => {
-                    ctx.fillText(line.slice(0, 12), -8, -38 + i * 9);
+                    ctx.fillText(line.slice(0, 12), panelX + 12, panelY + 12 + i * 9);
                 });
             }
 
             if (hasBtns) {
                 const btns = geom.panelButtons;
                 const count = btns.length;
-                const startX = 50;
-                const endX = 140;
+                const startX = panelX + 76;
+                const endX = panelX + panelWidth - 16;
                 const step = (endX - startX) / (count + 1);
 
                 for(let i=0; i<count; i++) {
                     const btn = btns[i];
                     const cx = startX + step * (i + 1);
-                    const cy = -10;
+                    const cy = panelY + panelHeight / 2;
                     ctx.beginPath();
                     ctx.arc(cx, cy, (btn.size || 8) / 2, 0, Math.PI * 2);
                     

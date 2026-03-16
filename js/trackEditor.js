@@ -22,6 +22,74 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 let dragMoved = false;
 
+function toHexByte(value) {
+    return (Number(value) & 0xFF).toString(16).toUpperCase().padStart(2, '0');
+}
+
+function normalizeRfidUid(value) {
+    const pairs = String(value ?? '').match(/[0-9a-fA-F]{2}/g);
+    if (!pairs || pairs.length === 0) return '';
+    return pairs.map(p => p.toUpperCase()).join(':');
+}
+
+function randomByte() {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const arr = new Uint8Array(1);
+        crypto.getRandomValues(arr);
+        return arr[0];
+    }
+    return Math.floor(Math.random() * 256);
+}
+
+function generateAutoRfidUid(existingElements = interactiveElements) {
+    const existing = new Set(
+        (existingElements || [])
+            .filter(el => el && el.type === 'rfid')
+            .map(el => normalizeRfidUid(el.value))
+            .filter(Boolean)
+    );
+
+    // Typical educational RFID tags are usually represented as 4-byte HEX UIDs.
+    for (let i = 0; i < 256; i++) {
+        const uid = `04:${toHexByte(randomByte())}:${toHexByte(randomByte())}:${toHexByte(randomByte())}`;
+        if (!existing.has(uid)) return uid;
+    }
+
+    const t = Date.now();
+    return `04:${toHexByte(t)}:${toHexByte(t >> 8)}:${toHexByte(t >> 16)}`;
+}
+
+function hydrateInteractiveElements(rawElements) {
+    if (!Array.isArray(rawElements)) return [];
+
+    const loaded = [];
+    rawElements.forEach(raw => {
+        if (!raw || typeof raw.type !== 'string') return;
+
+        const type = String(raw.type).toLowerCase();
+        const entry = {
+            id: raw.id || (Date.now() + Math.floor(Math.random() * 100000)),
+            type,
+            x: Number(raw.x) || 0,
+            y: Number(raw.y) || 0,
+            width: Math.max(1, Number(raw.width) || 50),
+            height: Math.max(1, Number(raw.height) || 50),
+            value: raw.value ?? '',
+            color: raw.color || '#0000ff',
+            rotation: Number(raw.rotation) || 0
+        };
+
+        if (type === 'rfid') {
+            const normalized = normalizeRfidUid(entry.value);
+            entry.value = normalized || generateAutoRfidUid(loaded);
+        }
+
+        loaded.push(entry);
+    });
+
+    return loaded;
+}
+
 // Directions for connection logic
 const OPPOSITE_DIRECTIONS = { N: 'S', S: 'N', E: 'W', W: 'E' };
 const DIRECTIONS = [
@@ -141,18 +209,9 @@ export function initTrackEditor(appInterface) {
         // Setup initial grid with proper sizing
         console.log("[TrackEditor] Setting up initial grid...");
         setupGrid();
-        // Generar pista aleatoria inicial en el grid por defecto (3x6)
+        // Cargar la pista por defecto definida en assets/tracks/PistaPorDefecto.json
         setTimeout(() => {
-            generateRandomTrackWithRetry_Modo();
-            if (elems.trackEditorTrackNameInput) {
-                elems.trackEditorTrackNameInput.value = 'PistaAleatoria_3x6';
-            }
-
-            // Exportar automáticamente la pista inicial al simulador
-            const exportedCanvas = exportTrackAsCanvas();
-            if (exportedCanvas && mainAppInterface) {
-                mainAppInterface.loadTrackFromEditor(exportedCanvas, 0, 0, 0);
-            }
+            loadDefaultTrackDesign(elems.trackGridSizeSelect, elems.trackEditorTrackNameInput);
         }, 100);
     });
 
@@ -192,7 +251,10 @@ export function initTrackEditor(appInterface) {
     if (elems.generateRandomTrackButton) {
         elems.generateRandomTrackButton.replaceWith(elems.generateRandomTrackButton.cloneNode(true)); // Remove all listeners
         const newBtn = document.getElementById('generateRandomTrack');
-        newBtn.addEventListener('click', () => { generateRandomTrackWithRetry_Modo(); });
+        if (newBtn) {
+            newBtn.disabled = true;
+            newBtn.title = 'Generacion aleatoria deshabilitada para mantener la pista por defecto';
+        }
     }
 
     // Setup event listeners
@@ -574,8 +636,15 @@ function onGridSingleClick(event) {
         const elems = getDOMElements();
         let w = parseFloat(elems?.intSettWidth?.value) || 100;
         let h = parseFloat(elems?.intSettLength?.value) || 100;
-        let val = parseInt(elems?.intSettValue?.value) || 0;
+        const rawValue = String(elems?.intSettValue?.value ?? '').trim();
+        let val = Number.isFinite(parseInt(rawValue, 10)) ? parseInt(rawValue, 10) : 0;
         let col = elems?.intSettColor?.value || '#0000ff';
+
+        if (currentToolMode === 'rfid') {
+            val = normalizeRfidUid(rawValue) || generateAutoRfidUid();
+        } else if (currentToolMode === 'hopper') {
+            val = rawValue;
+        }
 
         interactiveElements.push({
             id: Date.now() + Math.floor(Math.random()*1000),
@@ -588,8 +657,8 @@ function onGridSingleClick(event) {
             color: col,
             rotation: 0
         });
-
-        selectedInteractiveElement = interactiveElements[interactiveElements.length-1];
+        // Keep creation settings independent from already placed objects.
+        selectedInteractiveElement = null;
         document.querySelectorAll('#trackPartsPalette img').forEach(p => p.classList.remove('selected'));
         selectedTrackPart = null;
 
@@ -994,6 +1063,17 @@ function saveTrackDesign() {
     const designData = {
         gridSize: { ...currentGridSize },
         gridParts: [],
+        interactiveElements: interactiveElements.map(el => ({
+            id: el.id,
+            type: el.type,
+            x: el.x,
+            y: el.y,
+            width: el.width,
+            height: el.height,
+            value: el.value,
+            color: el.color,
+            rotation: el.rotation || 0
+        })),
         trackName: trackName
     };
     for (let r = 0; r < currentGridSize.rows; r++) {
@@ -1052,6 +1132,8 @@ function loadTrackDesign(event, gridSizeSelect, trackNameInput) {
 
 
             setupGrid(); // Re-initializes grid array and canvas size
+            interactiveElements = [];
+            selectedInteractiveElement = null;
 
             designData.gridParts.forEach(partData => {
                 if (partData.r < currentGridSize.rows && partData.c < currentGridSize.cols) {
@@ -1069,6 +1151,8 @@ function loadTrackDesign(event, gridSizeSelect, trackNameInput) {
                     }
                 }
             });
+
+            interactiveElements = hydrateInteractiveElements(designData.interactiveElements);
             renderEditor();
             alert(`Diseño "${file.name}" cargado.`);
 
@@ -1180,6 +1264,16 @@ function exportTrackAsCanvas() {
     exportCtx.fillStyle = 'white'; // Background color of the track image
     exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
 
+    // Build a second canvas used only for IR line detection (track pieces only).
+    // Interactive elements are rendered on exportCanvas for visuals, but must not
+    // pollute the pixel map used by line sensors.
+    const lineMaskCanvas = document.createElement('canvas');
+    lineMaskCanvas.width = exportCanvas.width;
+    lineMaskCanvas.height = exportCanvas.height;
+    const lineMaskCtx = lineMaskCanvas.getContext('2d');
+    lineMaskCtx.fillStyle = 'white';
+    lineMaskCtx.fillRect(0, 0, lineMaskCanvas.width, lineMaskCanvas.height);
+
     let hasContent = false;
     for (let r = 0; r < currentGridSize.rows; r++) {
         for (let c = 0; c < currentGridSize.cols; c++) {
@@ -1194,6 +1288,12 @@ function exportTrackAsCanvas() {
                 exportCtx.rotate(part.rotation_deg * Math.PI / 180);
                 exportCtx.drawImage(part.image, -TRACK_PART_SIZE_PX / 2, -TRACK_PART_SIZE_PX / 2, TRACK_PART_SIZE_PX, TRACK_PART_SIZE_PX);
                 exportCtx.restore();
+
+                lineMaskCtx.save();
+                lineMaskCtx.translate(x_center, y_center);
+                lineMaskCtx.rotate(part.rotation_deg * Math.PI / 180);
+                lineMaskCtx.drawImage(part.image, -TRACK_PART_SIZE_PX / 2, -TRACK_PART_SIZE_PX / 2, TRACK_PART_SIZE_PX, TRACK_PART_SIZE_PX);
+                lineMaskCtx.restore();
             }
         }
     }
@@ -1204,6 +1304,9 @@ function exportTrackAsCanvas() {
         alert("El editor de pistas está vacío. No hay nada para exportar.");
         return null;
     }
+
+    // Attach line-only mask so Track can use it for IR sampling.
+    exportCanvas.__lineMaskCanvas = lineMaskCanvas;
     exportCanvas.dataset.fromEditor = 'true';
     return exportCanvas;
 }
@@ -1270,6 +1373,8 @@ function loadDefaultTrackDesign(gridSizeSelect, trackNameInput) {
                 trackNameInput.value = designData.trackName;
             }
             setupGrid();
+            interactiveElements = [];
+            selectedInteractiveElement = null;
             designData.gridParts.forEach(partData => {
                 if (partData.r < currentGridSize.rows && partData.c < currentGridSize.cols) {
                     const originalPartInfo = AVAILABLE_TRACK_PARTS.find(p => p.file === partData.partFile);
@@ -1283,6 +1388,7 @@ function loadDefaultTrackDesign(gridSizeSelect, trackNameInput) {
                     }
                 }
             });
+            interactiveElements = hydrateInteractiveElements(designData.interactiveElements);
             renderEditor();
             // Exportar automáticamente al simulador si la interfaz está disponible
             if (mainAppInterface && typeof exportTrackAsCanvas === 'function') {
@@ -1363,6 +1469,8 @@ function updateInteractiveUI(mode, elems) {
 }
 
 function updateSelectedInteractiveElement() {
+    // Only allow live editing of a placed interactive while in move mode.
+    if (currentToolMode !== 'move') return;
     if(selectedInteractiveElement) {
         const elems = getDOMElements();
         if(!elems) return;

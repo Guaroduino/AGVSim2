@@ -1,15 +1,19 @@
 {
   "geometry": {
     "arduinoBoard": "mega",
-    "width_m": 0.1,
-    "sensorOffset_m": 0.12,
+    "width_m": 0.095,
+    "sensorOffset_m": 0.09,
     "sensorSpread_m": 0.015,
     "sensorDiameter_m": 0.02,
     "sensorCount": 3,
     "robotMass_kg": 0.38,
-    "comOffset_m": 0.0,
+    "comOffset_m": 0,
     "tireGrip": 0.8,
-    "customWheels": null,
+    "customWheels": {
+      "length_m": 0.04,
+      "width_m": 0.012,
+      "color": "#000000"
+    },
     "panelScreen": true,
     "panelButtons": [
       {
@@ -17,15 +21,14 @@
         "size": 12
       },
       {
-        "color": "#00aaff",
+        "color": "#ff0000",
         "size": 12
       },
       {
-        "color": "#00cc66",
+        "color": "#ff0000",
         "size": 12
       }
     ],
-    "horizontalSymmetry": true,
     "customSensors": [
       {
         "type": "rfid",
@@ -36,7 +39,7 @@
       },
       {
         "type": "led",
-        "x_mm": 130,
+        "x_mm": 102,
         "y_mm": 0,
         "detectionDiameter": 10,
         "color": "#ff0000",
@@ -45,14 +48,18 @@
     ],
     "connections": {
       "sensorPins": {
+        "fullFarLeft": "",
         "farLeft": "",
         "left": "22",
         "center": "23",
+        "centerLeft": "",
+        "centerRight": "",
         "right": "24",
+        "left_rear": "25",
+        "center_rear": "26",
+        "right_rear": "27",
         "farRight": "",
-        "left_rear": "28",
-        "center_rear": "29",
-        "right_rear": "30",
+        "fullFarRight": "",
         "pinPanelScreen_SDA": "20",
         "pinPanelScreen_SCL": "21",
         "pinPanelBtn_0": "25",
@@ -60,13 +67,13 @@
         "pinPanelBtn_2": "27",
         "custom_0_SDA": "53",
         "custom_0_SCK": "52",
+        "custom_0_sym_SCK": "52",
         "custom_0_MOSI": "51",
+        "custom_0_sym_MOSI": "51",
         "custom_0_MISO": "50",
+        "custom_0_sym_MISO": "50",
         "custom_0_RST": "49",
-        "custom_0_sym_SDA": "48",
-        "custom_0_sym_RST": "47",
-        "custom_1": "44",
-        "custom_1_sym": "45"
+        "custom_1": "44"
       },
       "driverType": "l298n",
       "motorPins": {
@@ -77,19 +84,42 @@
         "rightIn4": "8",
         "rightEn": "VCC"
       }
-    }
+    },
+    "horizontalSymmetry": true
   },
   "parts": [
     {
-      "id": "custom_body_1772999144031",
+      "id": "custom_body_1773615217390",
       "name": "Cuerpo Custom",
       "x": 0,
       "y": 0,
       "rotation": 0,
       "isParametric": true,
       "width_mm": 80,
-      "length_mm": 220,
-      "color": "#196114"
+      "length_mm": 210,
+      "color": "#3366cc"
+    },
+    {
+      "id": "custom_body_1773617711957",
+      "name": "Cuerpo Custom",
+      "x": -0.04117647058823527,
+      "y": -0.06068627450980392,
+      "rotation": 0,
+      "isParametric": true,
+      "width_mm": 30,
+      "length_mm": 70,
+      "color": "#6e6e6e"
+    },
+    {
+      "id": "custom_body_1773617735070",
+      "name": "Cuerpo Custom",
+      "x": -0.04117647058823527,
+      "y": -0.07320261437908496,
+      "rotation": 0,
+      "isParametric": true,
+      "width_mm": 15,
+      "length_mm": 30,
+      "color": "#000000"
     }
   ]
 }
