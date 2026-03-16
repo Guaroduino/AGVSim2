@@ -7,13 +7,13 @@
 // ====================================================================
 // 1. CONFIGURACIÓN Y PINES (AJUSTES FINOS)
 // ====================================================================
-int vel = 100;
+int vel = 80;
 int velinv = 50;
 int velPico = 40;
-int velGiro = 80;
+int velGiro = 60;
 
 int tiempoGiroCiego = 300;       
-int tiempoRetrocesoTolva = 350;  
+int tiempoRetrocesoTolva = 200;  
 int tiempoFrenoActivo = 100;     
 
 const int IN1 = 5;
