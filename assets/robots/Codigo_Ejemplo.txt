@@ -158,7 +158,7 @@ void darVuelta180() {
   mostrarPantalla("SENTIDO", "Corregido a Cara A");
 }
 
-// CORRECCIÓN: Ahora solo lee los sensores que están "adelante"
+// CORRECCIÓN: Ahora solo lee los sensores que están "adelante" con un pequeño buffer anti-ruido
 bool detectarZonaNegra() {
   int izq, cen, der;
   if (caraA_Activa) {
@@ -172,7 +172,25 @@ bool detectarZonaNegra() {
     cen = digitalRead(S_B_CEN);
     der = digitalRead(S_B_DER);
   }
-  return (izq == 1 && cen == 1 && der == 1);
+  
+  // Si encontramos negro, confirmamos repetidas veces para evitar falsos positivos
+  if (izq == 1 && cen == 1 && der == 1) {
+    for (int i = 0; i < 5; i++) {
+       delay(5);
+       if (caraA_Activa) {
+         izq = digitalRead(S_A_IZQ); 
+         cen = digitalRead(S_A_CEN); 
+         der = digitalRead(S_A_DER);
+       } else {
+         izq = digitalRead(S_B_IZQ); 
+         cen = digitalRead(S_B_CEN); 
+         der = digitalRead(S_B_DER);
+       }
+       if (izq == 0 || cen == 0 || der == 0) return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 // ====================================================================
@@ -190,12 +208,14 @@ String leerTag() {
 
 void ejecutarCoreografia(int estacionId) {
   cambiarEstado("1. ENTRADA");
+  mostrarPantalla("ESTACION " + String(estacionId + 1), "Entrando a Tolva...");
   frenarMotores(); delay(150);
   int dirGiro = ladoTolva[estacionId];
   girar90(dirGiro); 
 
   while (pedidos[estacionId] > 0) {
     cambiarEstado("2. BUSCANDO ZONA NEGRA");
+    mostrarPantalla("ESPERANDO CARGA", "Faltan: " + String(pedidos[estacionId]));
     while (!detectarZonaNegra()) { 
       controlLineaInteligente(); 
       delay(5); 
@@ -210,16 +230,19 @@ void ejecutarCoreografia(int estacionId) {
     
     if (pedidos[estacionId] > 0) {
       cambiarEstado("3.1 REACONDICIONAR");
+      mostrarPantalla("TOLVA " + String(estacionId + 1), "Retrocediendo...");
       aplicarMotores(-vel, -vel); delay(tiempoRetrocesoTolva); 
       frenarMotores(); delay(400); 
     }
   }
 
   cambiarEstado("4. INVERSION");
+  mostrarPantalla("INVERSION", "Invirtiendo cara...");
   caraA_Activa = !caraA_Activa;
   ultimoUID = ""; 
 
   cambiarEstado("5. SALIDA LIMPIA");
+  mostrarPantalla("ESTACION " + String(estacionId + 1), "Saliendo...");
   aplicarMotores(vel, vel);
   int cenLog = 0;
   while(cenLog == 0) {
@@ -230,6 +253,7 @@ void ejecutarCoreografia(int estacionId) {
   while (leerTag() == "") { controlLineaInteligente(); delay(5); }
 
   cambiarEstado("6. REINCORPORACION");
+  mostrarPantalla("NAVEGACION", caraA_Activa ? "Cara A activa" : "Cara B activa");
   frenarMotores(); delay(150);
   girar90(dirGiro); 
   tiempoBloqueoRFID = millis(); 

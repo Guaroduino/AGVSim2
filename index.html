@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arduino Line Follower Advanced Simulator</title>
+    <title>Simulador de Prototipo de AGV</title>
     
     <!-- Dependencias para la nueva pestaña Guía (Tailwind primero para que style.css pueda sobreescribir) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -237,9 +237,9 @@
     <header>
         <div class="header-flex">
             <div class="header-title-nav">
-                <h1>Simulador de Seguidor de Lineas</h1>
+                <h1>Simulador Prototipo de AGV</h1>
                 <nav class="tabs">
-                    <button class="tab-button active" data-tab="introduccion">Tutorial</button>
+                    <button class="tab-button active" data-tab="introduccion">Informe</button>
                     <button class="tab-button" data-tab="guia">Guía</button>
                     <button class="tab-button" data-tab="robot-editor">Editor de Robot</button>
                     <button class="tab-button" data-tab="code-editor">Editor de Código</button>
@@ -262,77 +262,299 @@
 
     <main>
         <!-- Introducción Tab -->
-        <div id="introduccion" class="tab-content active">
-            <div style="max-width:900px;margin:2em auto 0 auto;text-align:justify;">
-                <h1 style="text-align:center; color: var(--primary-color);">🤖 Guía Rápida: ¿Cómo usar el simulador?</h1>
-                <p style="text-align:center; font-size: 1.1em;">
-                    Bienvenido al Simulador de Robots Seguidores de Línea. Sigue estos sencillos pasos para crear, programar y probar tu primer robot en nuestro entorno virtual.
-                </p>
-                <hr>
-
-                <div style="margin-top: 2em;">
-                    <h3>🛠️ Paso 1: Crea tu Robot (Pestaña "Editor de Robot")</h3>
-                    <p>
-                        Aquí definirás las características físicas y electrónicas de tu vehículo:
-                    </p>
-                    <ul>
-                        <li>Atributos físicos: Ancho, agarre de llantas, y posición de los sensores.</li>
-                        <li>Configuración electrónica: Selecciona los pines de tu placa Arduino a los cuales conectarás tanto los motores como los sensores.</li>
-                        <li>Diseño visual: Arrastra componentes de la paleta lateral para construir tu chasis.</li>
-                        <li><b>Importante:</b> Recuerda darle al botón verde <b>"Cargar Diseño en Simulador"</b> al terminar para aplicar tus cambios.</li>
-                    </ul>
-                    <p style="background: #e3f2fd; padding: 10px; border-left: 4px solid #2196f3; border-radius: 4px;">
-                        <i>💡 <b>Shortcut:</b> Si quieres ver algo funcionando rápido, haz clic en el botón <b>"Cargar Ejemplo"</b> en esta pestaña para tener un robot de 2 sensores ensamblado de inmediato.</i>
-                    </p>
+        <div id="introduccion" class="tab-content active bg-slate-50 text-slate-800 font-sans antialiased selection:bg-blue-200 selection:text-blue-900">
+            <header class="bg-sky-100 text-slate-900 py-16 relative overflow-hidden">
+                <div class="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-100 via-sky-100 to-indigo-100"></div>
+                <div class="max-w-6xl mx-auto px-6 lg:px-8 relative z-10">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div>
+                            <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-2 flex items-center gap-3 text-sky-800">
+                                <i data-lucide="cpu" class="w-10 h-10 text-cyan-600"></i>
+                                Vehiculo Autonomo Guiado (AGV)
+                            </h1>
+                            <p class="text-xl text-slate-700 font-medium tracking-wide">Informe Técnico del Proyecto</p>
+                        </div>
+                        <div class="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-sky-200 shadow-lg text-sm md:text-base">
+                            <p class="flex items-center gap-2 mb-1"><i data-lucide="users" class="w-4 h-4 text-blue-500"></i> <strong class="text-slate-700">Equipo:</strong> SVP STEAM Club Ingenio Creativo</p>
+                            <p class="flex items-center gap-2 mb-1"><i data-lucide="user" class="w-4 h-4 text-emerald-500"></i> <strong class="text-slate-700">Mentor:</strong> Ing. Luis Fernando Corado G.</p>
+                            <p class="flex items-center gap-2"><i data-lucide="award" class="w-4 h-4 text-amber-500"></i> <strong class="text-slate-700">Categoría:</strong> Ingenio Creativo</p>
+                        </div>
+                    </div>
                 </div>
+            </header>
 
-                <hr>
+            <div class="max-w-6xl mx-auto px-6 lg:px-8 py-12 flex flex-col md:flex-row gap-12">
+                <aside class="hidden md:block w-1/4 shrink-0">
+                    <div class="sticky top-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Contenido</h3>
+                        <nav class="space-y-3 text-sm font-medium text-slate-600">
+                            <a href="#objetivo" class="block hover:text-blue-600 transition-colors flex items-center gap-2"><i data-lucide="target" class="w-4 h-4"></i> Objetivo</a>
+                            <a href="#hardware" class="block hover:text-blue-600 transition-colors flex items-center gap-2"><i data-lucide="microchip" class="w-4 h-4"></i> Hardware</a>
+                            <a href="#infraestructura" class="block hover:text-blue-600 transition-colors flex items-center gap-2"><i data-lucide="map" class="w-4 h-4"></i> Infraestructura</a>
+                            <a href="#logica" class="block hover:text-blue-600 transition-colors flex items-center gap-2"><i data-lucide="git-branch" class="w-4 h-4"></i> Lógica Maestra</a>
+                            <a href="#ventajas" class="block hover:text-blue-600 transition-colors flex items-center gap-2"><i data-lucide="thumbs-up" class="w-4 h-4"></i> Ventajas</a>
+                            <a href="#escalabilidad" class="block hover:text-blue-600 transition-colors flex items-center gap-2"><i data-lucide="trending-up" class="w-4 h-4"></i> Escalabilidad</a>
+                            <a href="#mejoras" class="block hover:text-blue-600 transition-colors flex items-center gap-2"><i data-lucide="fast-forward" class="w-4 h-4"></i> Mejoras Futuras</a>
+                        </nav>
+                    </div>
+                </aside>
 
-                <div style="margin-top: 2em;">
-                    <h3>💻 Paso 2: Programa tu Lógica (Pestaña "Editor de Código")</h3>
-                    <p>
-                        Escribe el código C++ (estilo Arduino) para darle un "cerebro" al robot. Deberás leer los sensores con <code>digitalRead()</code> y mover los motores con <code>digitalWrite()</code> o <code>analogWrite()</code>.
-                    </p>
-                    <ul>
-                        <li>Recuerda usar las variables y tipos de la sintaxis nativa (<code>int</code>, <code>if/else</code>, <code>void setup()</code>).</li>
-                        <li>Al terminar de escribir, haz clic siempre en el botón verde <b>"Cargar Código en Simulador"</b> para transpilar y cargar el código a la memoria del simulador.</li>
-                    </ul>
-                    <p style="background: #e3f2fd; padding: 10px; border-left: 4px solid #2196f3; border-radius: 4px;">
-                        <i>💡 <b>Shortcut:</b> Haz clic en el botón <b>"Cargar Ejemplo"</b> en la parte baja del editor para inyectar automáticamente un algoritmo básico compatible con el robot del Paso 1.</i>
-                    </p>
-                </div>
+                <div class="w-full md:w-3/4 space-y-16">
+                    <section id="objetivo" class="scroll-mt-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <i data-lucide="target" class="text-blue-600"></i> 1. Objetivo del Proyecto
+                        </h2>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <p class="text-slate-700 leading-relaxed">
+                                Desarrollar un Vehículo Guiado Automáticamente (AGV) altamente eficiente y preciso para la navegación y recolección de materiales en un circuito cerrado. El diseño prioriza la optimización del código, el ahorro de pines y recursos del microcontrolador, y la precisión mecánica mediante una integración inteligente del hardware y la topología de la pista.
+                            </p>
+                        </div>
+                    </section>
 
-                <hr>
+                    <section id="hardware" class="scroll-mt-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <i data-lucide="microchip" class="text-blue-600"></i> 2. Especificaciones Físicas y de Hardware
+                        </h2>
+                        <p class="text-slate-700 mb-6">El diseño del AGV se basa en un chasis minimalista de bajo perfil, operado por los siguientes componentes:</p>
 
-                <div style="margin-top: 2em;">
-                    <h3>🏁 Paso 3: Diseña tu Circuito (Pestaña "Editor de Pista")</h3>
-                    <p>
-                        Usa nuestra herramienta de dibujo en base a cuadrícula para crear cualquier diseño de pista:
-                    </p>
-                    <ul>
-                        <li>Selecciona curvas y trazos rectos del menú izquierdo y colócalos en el lienzo.</li>
-                        <li>O agrega el botón <b>"Pista Aleatoria"</b> para generar diferentes retos.</li>
-                        <li>Al terminar, asegúrate de presionar el botón verde <b>"Cargar Pista en Simulador"</b> para enviar el circuito.</li>
-                    </ul>
-                </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-start">
+                                <div class="bg-blue-100 p-2 rounded-lg text-blue-600 shrink-0"><i data-lucide="cpu"></i></div>
+                                <div>
+                                    <h4 class="font-bold text-slate-900">Microcontrolador</h4>
+                                    <p class="text-sm text-slate-600 mt-1">Arduino Mega (modificado sin conectores de pines para reducir el perfil físico y mantener un ensamblaje compacto).</p>
+                                </div>
+                            </div>
 
-                <hr>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-start">
+                                <div class="bg-blue-100 p-2 rounded-lg text-blue-600 shrink-0"><i data-lucide="settings"></i></div>
+                                <div>
+                                    <h4 class="font-bold text-slate-900">Tracción y Movilidad</h4>
+                                    <p class="text-sm text-slate-600 mt-1">2 micromotores DC con engranajes metálicos, driver puente H MX1616. 2 canicas de vidrio (metras) como ruedas locas para deslizamiento suave.</p>
+                                </div>
+                            </div>
 
-                <div style="margin-top: 2em;">
-                    <h3>🏎️ Paso 4: ¡A Correr! (Pestaña "Simulación")</h3>
-                    <p>
-                        Tu área de pruebas final. Una vez aplicados el diseño de la pista, la geometría del robot y el código:
-                    </p>
-                    <ul>
-                        <li>No olvides definir tu <b>Línea de Salida/Meta</b> haciendo clic en el botón de Ubicar Línea y haciendo clic sobre la pista.</li>
-                        <li>Presiona <b>"Iniciar"</b> para que comience la ejecución.</li>
-                        <li>Revisa el <b>Monitor Serial</b> para depurar errores si tu robot no hace lo que esperabas.</li>
-                        <li>Observa tus tiempos por vuelta en la ventana de cronometraje ⏱️.</li>
-                    </ul>
-                </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-start">
+                                <div class="bg-blue-100 p-2 rounded-lg text-blue-600 shrink-0"><i data-lucide="battery-charging"></i></div>
+                                <div>
+                                    <h4 class="font-bold text-slate-900">Alimentación</h4>
+                                    <p class="text-sm text-slate-600 mt-1">1 celda Li-ion 18650 con módulo elevador de voltaje (step-up) para estandarizar la electrónica a 5V estables.</p>
+                                </div>
+                            </div>
 
-                <div style="text-align:center; margin-top:3em; font-size:1.2em; border: 2px dashed var(--primary-color); padding: 1em; border-radius: 8px;">
-                    <b>¡Sigue el orden de estas pestañas, experimenta y conviértete en un experto en robótica!</b>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-start">
+                                <div class="bg-blue-100 p-2 rounded-lg text-blue-600 shrink-0"><i data-lucide="eye"></i></div>
+                                <div>
+                                    <h4 class="font-bold text-slate-900">Sensores de Navegación</h4>
+                                    <p class="text-sm text-slate-600 mt-1">6 sensores ópticos reflectivos TCRT5000 (3 agrupados en el extremo A y 3 en el extremo B).</p>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-start">
+                                <div class="bg-blue-100 p-2 rounded-lg text-blue-600 shrink-0"><i data-lucide="scan-line"></i></div>
+                                <div>
+                                    <h4 class="font-bold text-slate-900">Posicionamiento</h4>
+                                    <p class="text-sm text-slate-600 mt-1">Módulo lector RFID RC522 en el centro geométrico del chasis, interactuando con tags adhesivos en la pista.</p>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-start">
+                                <div class="bg-blue-100 p-2 rounded-lg text-blue-600 shrink-0"><i data-lucide="monitor"></i></div>
+                                <div>
+                                    <h4 class="font-bold text-slate-900">Interfaz y Señalización</h4>
+                                    <p class="text-sm text-slate-600 mt-1">Pantalla OLED de 0.96" (I2C) para menús y 4 LEDs indicadores de estado (dos en cada extremo).</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="infraestructura" class="scroll-mt-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <i data-lucide="map" class="text-blue-600"></i> 3. Infraestructura del Entorno
+                        </h2>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                            <div class="flex items-start gap-3">
+                                <i data-lucide="route" class="text-slate-400 mt-1 shrink-0"></i>
+                                <div>
+                                    <strong class="text-slate-900">Pista de Demostración:</strong>
+                                    <p class="text-slate-700">Superficie de MDF pintada de blanco con la trayectoria principal delimitada por una línea negra.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <i data-lucide="package" class="text-slate-400 mt-1 shrink-0"></i>
+                                <div>
+                                    <strong class="text-slate-900">Tolvas de Recolección:</strong>
+                                    <p class="text-slate-700">Estructuras cilíndricas de tubos de cartón, con mecanismo dispensador impreso en 3D (singulator de doble uña) accionado de forma puramente mecánica por contacto físico.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="logica" class="scroll-mt-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <i data-lucide="git-branch" class="text-blue-600"></i> 4. Lógica Maestra de Navegación y Operación
+                        </h2>
+                        <p class="text-slate-700 mb-8">El software del AGV está construido sobre principios fundamentales que garantizan un movimiento fluido, libre de errores y optimizado:</p>
+
+                        <div class="space-y-8">
+                            <div class="bg-slate-800 text-white p-6 rounded-2xl relative overflow-hidden">
+                                <div class="absolute -right-6 -top-6 text-slate-700 opacity-30"><i data-lucide="repeat" class="w-32 h-32"></i></div>
+                                <h3 class="text-xl font-bold mb-3 flex items-center gap-2 text-blue-300 relative z-10">4.1. El "Truco del Espejo" (Navegación Bidireccional)</h3>
+                                <p class="text-slate-300 mb-4 relative z-10">El robot posee una simetría mecánica total, lo que elimina la necesidad de realizar maniobras lentas de 180° para regresar. Al invertir la variable <code>caraA_Activa</code>, el microcontrolador:</p>
+                                <ul class="list-disc pl-5 text-slate-300 space-y-2 relative z-10">
+                                    <li>Invierte el sentido de giro de los motores en el driver.</li>
+                                    <li>Traslada la lectura de seguimiento a los 3 sensores TCRT5000 del lado opuesto.</li>
+                                    <li>Alterna la iluminación LED (blancas = nuevo frente, rojas = nueva trasera).</li>
+                                </ul>
+                                <div class="mt-4 bg-slate-900/50 p-3 rounded-lg border border-slate-700 text-sm text-slate-400 font-mono relative z-10">
+                                    // Físicamente retrocede, lógicamente avanza hacia adelante.
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-emerald-500">
+                                    <h3 class="text-lg font-bold text-slate-900 mb-3">4.2. Delegación al Sistema RFID</h3>
+                                    <p class="text-sm text-slate-700">Al ubicar el RFID en el centro geométrico del robot (eje de ruedas), cuando detecta un tag en la pista, el robot ya está posicionado milimétricamente en el cruce. Permite frenar en seco y pivotar sin avances "a ciegas" o delays imprecisos.</p>
+                                </div>
+                                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 border-t-4 border-t-blue-500">
+                                    <h3 class="text-lg font-bold text-slate-900 mb-3">4.3. Topología de la Pista</h3>
+                                    <p class="text-sm text-slate-700">Diseñada como un anillo continuo (óvalo) con ramificaciones perpendiculares hacia las tolvas. Al ser circuito cerrado, el robot navega fluidamente sin lidiar con esquinas de 90° en su tránsito principal.</p>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                <h3 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2"><i data-lucide="play-circle" class="text-blue-500"></i> 4.4. Inicio de Ciclo y Decisiones</h3>
+                                <ol class="relative border-s border-slate-200 ml-3">
+                                    <li class="mb-6 ms-6">
+                                        <span class="absolute flex items-center justify-center w-6 h-6 bg-blue-100 rounded-full -start-3 ring-8 ring-white">
+                                            <span class="text-blue-800 text-xs font-bold">1</span>
+                                        </span>
+                                        <h4 class="font-bold text-slate-900 leading-tight">Configuración</h4>
+                                        <p class="text-sm text-slate-600 mt-1">El operador interactúa con la OLED para establecer el "pedido" exacto.</p>
+                                    </li>
+                                    <li class="mb-6 ms-6">
+                                        <span class="absolute flex items-center justify-center w-6 h-6 bg-blue-100 rounded-full -start-3 ring-8 ring-white">
+                                            <span class="text-blue-800 text-xs font-bold">2</span>
+                                        </span>
+                                        <h4 class="font-bold text-slate-900 leading-tight">Arranque</h4>
+                                        <p class="text-sm text-slate-600 mt-1">Presionando "Play", inicia la marcha siguiendo la línea principal.</p>
+                                    </li>
+                                    <li class="mb-6 ms-6">
+                                        <span class="absolute flex items-center justify-center w-6 h-6 bg-blue-100 rounded-full -start-3 ring-8 ring-white">
+                                            <span class="text-blue-800 text-xs font-bold">3</span>
+                                        </span>
+                                        <h4 class="font-bold text-slate-900 leading-tight">Evaluación y Decisión</h4>
+                                        <p class="text-sm text-slate-600 mt-1">Al detectar un tag RFID, consulta la memoria. Si no hay pedido allí, omite el cruce. Si lo hay, inicia la Coreografía de Recolección.</p>
+                                    </li>
+                                </ol>
+                            </div>
+
+                            <div class="bg-blue-50 p-6 rounded-2xl border border-blue-100">
+                                <h3 class="text-xl font-bold text-slate-900 mb-4">4.5. La Coreografía de Recolección</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div class="bg-white p-4 rounded-xl shadow-sm"><strong class="block text-blue-700 text-sm">1. Entrada</strong><span class="text-sm text-slate-600">Giro de tanque de 90° a la derecha para ingresar a la ramificación.</span></div>
+                                    <div class="bg-white p-4 rounded-xl shadow-sm"><strong class="block text-blue-700 text-sm">2. Aproximación</strong><span class="text-sm text-slate-600">Sigue la línea hasta detectar la "zona negra sólida".</span></div>
+                                    <div class="bg-white p-4 rounded-xl shadow-sm"><strong class="block text-blue-700 text-sm">3. El Martilleo</strong><span class="text-sm text-slate-600">Lazo abierto: choque mecánico programado para liberar una pieza. Se repite si es necesario.</span></div>
+                                    <div class="bg-white p-4 rounded-xl shadow-sm"><strong class="block text-blue-700 text-sm">4. La Inversión</strong><span class="text-sm text-slate-600">Invierte su "Frente Lógico" (Truco del Espejo).</span></div>
+                                    <div class="bg-white p-4 rounded-xl shadow-sm"><strong class="block text-blue-700 text-sm">5. Salida Limpia</strong><span class="text-sm text-slate-600">Avanza mientras el RFID no lea ninguna etiqueta.</span></div>
+                                    <div class="bg-white p-4 rounded-xl shadow-sm"><strong class="block text-blue-700 text-sm">6. Reincorporación</strong><span class="text-sm text-slate-600">Al leer el tag principal, frena, gira 90° y continúa su ruta por el anillo.</span></div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                                <h3 class="text-lg font-bold text-slate-900 mb-2">4.6. Verificación de Orientación y Retorno</h3>
+                                <p class="text-slate-700">Un tag de verificación final asegura que el robot termine con su frente original (girando 180° si está invertido) para que la pantalla mire al operador. Un último tag marca la línea de meta, deteniéndolo exactamente donde inició.</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="ventajas" class="scroll-mt-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <i data-lucide="thumbs-up" class="text-blue-600"></i> 5. Ventajas del Diseño Actual
+                        </h2>
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <div class="bg-emerald-50 border border-emerald-100 p-5 rounded-xl">
+                                <h4 class="font-bold text-emerald-800 flex items-center gap-2 mb-2"><i data-lucide="check-circle" class="w-5 h-5"></i> Cumplimiento Normativo</h4>
+                                <p class="text-sm text-emerald-900">Se ajusta estrictamente a los lineamientos de la competencia Ingenio Creativo, garantizando viabilidad competitiva.</p>
+                            </div>
+                            <div class="bg-emerald-50 border border-emerald-100 p-5 rounded-xl">
+                                <h4 class="font-bold text-emerald-800 flex items-center gap-2 mb-2"><i data-lucide="cpu" class="w-5 h-5"></i> Centralización Inteligente</h4>
+                                <p class="text-sm text-emerald-900">Toda la inteligencia está en el vehículo; la pista es pasiva. Escalar el circuito es tan fácil como imprimir más tolvas, sin añadir cableado externo.</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="escalabilidad" class="scroll-mt-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <i data-lucide="trending-up" class="text-blue-600"></i> 6. Escalabilidad en el Mundo Real
+                        </h2>
+                        <p class="text-slate-700 mb-6">La arquitectura de este prototipo es directamente extrapolable a la industria logística moderna:</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="text-center p-6 bg-white rounded-xl shadow-sm border border-slate-100">
+                                <div class="mx-auto bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center text-blue-600 mb-4">
+                                    <i data-lucide="pill"></i>
+                                </div>
+                                <h4 class="font-bold text-slate-900 mb-2">Farmacias</h4>
+                                <p class="text-sm text-slate-600">Dispensar medicamentos desde récipe digital, reduciendo el error humano.</p>
+                            </div>
+                            <div class="text-center p-6 bg-white rounded-xl shadow-sm border border-slate-100">
+                                <div class="mx-auto bg-amber-100 w-12 h-12 rounded-full flex items-center justify-center text-amber-600 mb-4">
+                                    <i data-lucide="wrench"></i>
+                                </div>
+                                <h4 class="font-bold text-slate-900 mb-2">Almacenes</h4>
+                                <p class="text-sm text-slate-600">Preparación de pedidos exactos (kitting) para líneas de ensamblaje industrial.</p>
+                            </div>
+                            <div class="text-center p-6 bg-white rounded-xl shadow-sm border border-slate-100">
+                                <div class="mx-auto bg-green-100 w-12 h-12 rounded-full flex items-center justify-center text-green-600 mb-4">
+                                    <i data-lucide="apple"></i>
+                                </div>
+                                <h4 class="font-bold text-slate-900 mb-2">Agricultura</h4>
+                                <p class="text-sm text-slate-600">Selección de frutas o vegetales para armar lotes mixtos autónomamente.</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="mejoras" class="scroll-mt-8">
+                        <h2 class="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <i data-lucide="fast-forward" class="text-blue-600"></i> 7. Propuestas de Mejora Continua
+                        </h2>
+                        <ul class="space-y-3">
+                            <li class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
+                                <div class="bg-slate-100 p-2 rounded text-slate-500"><i data-lucide="wifi"></i></div>
+                                <div>
+                                    <strong class="text-slate-900">Detección de Obstáculos:</strong> <span class="text-slate-600 text-sm">Integrar sensores ToF (Time of Flight) para evitar colisiones.</span>
+                                </div>
+                            </li>
+                            <li class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
+                                <div class="bg-slate-100 p-2 rounded text-slate-500"><i data-lucide="palette"></i></div>
+                                <div>
+                                    <strong class="text-slate-900">Redundancia de Posicionamiento:</strong> <span class="text-slate-600 text-sm">Sensores de color como alternativa a las etiquetas RFID.</span>
+                                </div>
+                            </li>
+                            <li class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
+                                <div class="bg-slate-100 p-2 rounded text-slate-500"><i data-lucide="volume-2"></i></div>
+                                <div>
+                                    <strong class="text-slate-900">Interfaz Acústica:</strong> <span class="text-slate-600 text-sm">Buzzer para emitir señales sonoras de estado o errores.</span>
+                                </div>
+                            </li>
+                            <li class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
+                                <div class="bg-slate-100 p-2 rounded text-slate-500"><i data-lucide="zap"></i></div>
+                                <div>
+                                    <strong class="text-slate-900">Actuadores Activos:</strong> <span class="text-slate-600 text-sm">Servomotores en lugar de choque mecánico para recolección más fina.</span>
+                                </div>
+                            </li>
+                            <li class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
+                                <div class="bg-slate-100 p-2 rounded text-slate-500"><i data-lucide="radio-receiver"></i></div>
+                                <div>
+                                    <strong class="text-slate-900">Tolvas Inteligentes:</strong> <span class="text-slate-600 text-sm">Sensores IR en las estaciones para control de inventario y alertas de vacío.</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <footer class="mt-16 border-t border-slate-200 pt-8 pb-4 text-center text-slate-500 text-sm">
+                        <p>Generado para el Equipo SVP STEAM Club Ingenio Creativo &bull; Proyecto AGV</p>
+                    </footer>
                 </div>
             </div>
         </div>
@@ -390,13 +612,11 @@
                                 Parámetros</button>
                         </details>
                     </div>
-                    <!-- Monitor Serial y Cronómetro -->
+                    <!-- Monitor Serial -->
                     <div class="sim-monitor-column">
                         <h4>Monitor Serial</h4>
                         <pre id="serialMonitorOutput"></pre>
                         <button id="clearSerialButton" type="button">Limpiar Serial</button>
-                        <h4>Cronómetro</h4>
-                        <pre id="lapTimerOutput">Vueltas: 0 | Mejor: --:--:--- | Actual: --:--:---</pre>
                     </div>
                 </div>
             </div>

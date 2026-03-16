@@ -864,13 +864,13 @@ export function initRobotEditor(appInterface) {
         console.log("Robot assets loaded, setting images...");
         previewRobot.setImages(wheelImg);
         // Load default robot JSON only on first load
-        // if (!window._defaultRobotLoaded) {
-        //     window._defaultRobotLoaded = true;
-        //     loadDefaultRobotJSON();
-        // } else {
-        zoomExtents();
-        renderRobotPreview();
-        // }
+        if (!window._defaultRobotLoaded) {
+            window._defaultRobotLoaded = true;
+            loadDefaultRobotJSON();
+        } else {
+            zoomExtents();
+            renderRobotPreview();
+        }
     });
 
     // Setup tab change observer
@@ -1048,35 +1048,45 @@ export function initRobotEditor(appInterface) {
         });
     });
 
-    document.querySelectorAll('#loadExampleRobotButton').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            try {
-                const response = await fetch('assets/robots/Robot Ejemplo.json');
-                if (!response.ok) throw new Error('No se pudo cargar el Robot Ejemplo.json');
-                const robotData = await response.json();
-                
-                if (robotData.geometry) {
-                    setFormValues(robotData.geometry);
-                    currentGeometry = getFormValues();
-                    previewRobot.updateGeometry(currentGeometry);
-                }
-                if (robotData.parts && window.restorePlacedPartsRaw) {
-                    window.restorePlacedPartsRaw(robotData.parts);
-                }
-                renderRobotPreview();
-                
-                // Aplicar automáticamente
+    window.loadExampleRobot = async function(options = {}) {
+        try {
+            const response = await fetch('assets/robots/Robot Ejemplo.json');
+            if (!response.ok) throw new Error('No se pudo cargar el Robot Ejemplo.json');
+            const robotData = await response.json();
+            
+            if (robotData.geometry) {
+                setFormValues(robotData.geometry);
+                currentGeometry = getFormValues();
+                previewRobot.updateGeometry(currentGeometry);
+            }
+            if (robotData.parts && window.restorePlacedPartsRaw) {
+                window.restorePlacedPartsRaw(robotData.parts);
+            }
+            renderRobotPreview();
+            
+            if (options.apply !== false) {
                 window.forceGeometrySync();
                 const decorativeParts = window.getPlacedParts ? window.getPlacedParts() : [];
-                mainAppInterface.updateRobotGeometry(currentGeometry, decorativeParts);
+                if (mainAppInterface && typeof mainAppInterface.updateRobotGeometry === 'function') {
+                    mainAppInterface.updateRobotGeometry(currentGeometry, decorativeParts);
+                }
+            }
+            return true;
+        } catch (err) {
+            console.error(err);
+            if (!options.silent) alert("💥 Error al cargar el robot de ejemplo.");
+            return false;
+        }
+    };
+
+    document.querySelectorAll('#loadExampleRobotButton').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const success = await window.loadExampleRobot({ apply: true, silent: false });
+            if (success) {
                 alert("✅ Robot de Ejemplo cargado y aplicado.");
-            } catch (err) {
-                console.error(err);
-                alert('💥 Error al cargar el robot de ejemplo.');
             }
         });
-    }
-    );
+    });
 }
 
 // Las partes decorativas 'sensor' ya no se usan para los IR, pero mantenemos la función para limpiar si existían.
@@ -1682,8 +1692,8 @@ function getPlacedPartsRaw() {
 
 export async function loadDefaultRobotJSON() {
     try {
-        const response = await fetch('assets/robots/Robot Generico OnOff.json');
-        if (!response.ok) throw new Error('No se pudo cargar Robot Generico OnOff.json');
+        const response = await fetch('assets/robots/Robot Ejemplo.json');
+        if (!response.ok) throw new Error('No se pudo cargar Robot Ejemplo.json');
         const robotData = await response.json();
         if (robotData.geometry) {
             setFormValues(robotData.geometry);

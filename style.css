@@ -318,10 +318,11 @@ h2 {
 
 .simulation-double-column {
     display: grid;
-    grid-template-columns: 1fr 320px;
+    grid-template-columns: 1fr;
     grid-template-areas:
-        "view params"
-        "view monitor";
+        "view"
+        "params"
+        "monitor";
     gap: 2rem;
     align-items: flex-start;
 }

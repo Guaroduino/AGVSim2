@@ -251,6 +251,51 @@ const normalizePin = (pin) => {
     return pin;
 };
 
+function resolveSensorValueByPin(pin, sensorPinMap, robotSensors) {
+    const normalizedPin = normalizePin(pin);
+    if (!Number.isFinite(normalizedPin) || !sensorPinMap || !robotSensors) return { value: 0, key: null };
+
+    // Resolución estricta por pin: no hay reglas especiales de simetría/inversión.
+    for (const [connKey, connVal] of Object.entries(sensorPinMap)) {
+        if (normalizePin(connVal) !== normalizedPin) continue;
+        if (Object.prototype.hasOwnProperty.call(robotSensors, connKey)) {
+            return { value: robotSensors[connKey] || 0, key: connKey };
+        }
+        if (connKey.startsWith('pinPanelBtn_')) {
+            const btnIdx = connKey.replace('pinPanelBtn_', '');
+            return { value: robotSensors[`btn_${btnIdx}`] || 0, key: `btn_${btnIdx}` };
+        }
+    }
+
+    return { value: 0, key: null };
+}
+
+function warnDuplicateSensorPinsIfAny(sensorPinMap) {
+    if (!sensorPinMap) return;
+    const byPin = new Map();
+
+    for (const [key, rawPin] of Object.entries(sensorPinMap)) {
+        // Ignorar pines de buses de comunicación (SPI / I2C) que sí pueden compartirse
+        if (key.includes('_MOSI') || key.includes('_MISO') || key.includes('_SCK') || 
+            key.includes('_SDA') || key.includes('_SCL')) {
+            continue;
+        }
+
+        const p = normalizePin(rawPin);
+        if (!Number.isFinite(p)) continue;
+        if (!byPin.has(p)) byPin.set(p, []);
+        byPin.get(p).push(key);
+    }
+
+    for (const [pin, keys] of byPin.entries()) {
+        if (keys.length < 2) continue;
+        const warnKey = `dup_sensor_pin_${pin}`;
+        if (_warnedPins.has(warnKey)) continue;
+        _warnedPins.add(warnKey);
+        ArduinoSerial.println(`Advertencia: El pin ${pin} está asignado a múltiples sensores (${keys.join(', ')}). Esto puede causar lecturas cruzadas entre Cara A/Cara B.`);
+    }
+}
+
 // Arduino API shim for user code
 const arduinoAPI = {
     pinMode: (pin, mode) => {
@@ -329,34 +374,9 @@ const arduinoAPI = {
             }
         }
 
-        let val = 0; // Default to 0 (off line)
         const robotSensors = sharedSimulationState.robot.sensors || {};
-        let matchedDirectSensor = false;
-
-        // Generic resolution for all directly mapped sensors (left/right, center, rear mirrors, custom_N, etc.).
-        for (const [connKey, connVal] of Object.entries(conns)) {
-            if (pin === resolveUIPin(connVal) && Object.prototype.hasOwnProperty.call(robotSensors, connKey)) {
-                val = robotSensors[connKey] || 0;
-                matchedDirectSensor = true;
-                break;
-            }
-        }
-
-        // Dynamic mapped generic sensors and buttons
-        if (!matchedDirectSensor) {
-            for (const [connKey, connVal] of Object.entries(conns)) {
-                if (connKey.startsWith('pinPanelBtn_')) {
-                    const btnIdx = connKey.replace('pinPanelBtn_', '');
-                    if (pin === resolveUIPin(connVal)) {
-                        val = robotSensors[`btn_${btnIdx}`] || 0;
-                    }
-                } else if (connKey.startsWith('custom_')) {
-                    if (pin === resolveUIPin(connVal)) {
-                        val = robotSensors[connKey] || 0;
-                    }
-                }
-            }
-        }
+        const resolution = resolveSensorValueByPin(pin, conns, robotSensors);
+        const val = resolution.value;
 
         // Debug
         // ArduinoSerial.println(`digitalRead(${pin}) -> ${val} (left: ${resolveUIPin(conns.left)}, center: ${resolveUIPin(conns.center)}, right: ${resolveUIPin(conns.right)})`);
@@ -758,6 +778,10 @@ export function loadUserCode(code) {
     _pinModes = {};
     _motorPWMValues = {}; // Reset fully
     _warnedPins = new Set(); // Reset warnings
+
+    if (sharedSimulationState?.robot?.connections?.sensorPins) {
+        warnDuplicateSensorPinsIfAny(sharedSimulationState.robot.connections.sensorPins);
+    }
 
     // --- Nivel 1: Verificador de Código Básico ---
     let basicErrors = false;

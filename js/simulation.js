@@ -137,6 +137,39 @@ export class Simulation {
 
     // Reemplaza la generación aleatoria por la de conexión si es posible
     _generateRandomStartLine() {
+        // Prioridad 1: RFID superior del editor (default del proyecto)
+        const interactiveRFID = (window.trackEditorInstance && typeof window.trackEditorInstance.getInteractiveElements === 'function')
+            ? window.trackEditorInstance.getInteractiveElements().filter(el => el && el.type === 'rfid')
+            : [];
+
+        if (interactiveRFID.length > 0) {
+            const topRfid = interactiveRFID.reduce((best, el) => (el.y < best.y ? el : best), interactiveRFID[0]);
+            const cx_px = topRfid.x + (topRfid.width || 30) / 2;
+            const cy_px = topRfid.y + (topRfid.height || 30) / 2;
+
+            // Línea vertical con vector hacia arriba->abajo invertido (dy < 0)
+            // para que startAngle quede orientado hacia la izquierda.
+            const lineLength_px = Math.max(this.robot.wheelbase_m * 1.8 * PIXELS_PER_METER, 60);
+            const half = lineLength_px / 2;
+            const x1 = cx_px;
+            const y1 = cy_px + half;
+            const x2 = cx_px;
+            const y2 = cy_px - half;
+            const startAngle = Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2;
+
+            return {
+                startLine: {
+                    x1: x1 / PIXELS_PER_METER,
+                    y1: y1 / PIXELS_PER_METER,
+                    x2: x2 / PIXELS_PER_METER,
+                    y2: y2 / PIXELS_PER_METER
+                },
+                startX: cx_px / PIXELS_PER_METER,
+                startY: cy_px / PIXELS_PER_METER,
+                startAngle
+            };
+        }
+
         // Intenta primero con la conexión entre piezas
         const fromConnection = this._generateStartLineFromConnection();
         if (fromConnection) {

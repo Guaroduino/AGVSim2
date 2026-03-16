@@ -95,21 +95,34 @@ document.getElementById('uploadCodeInput').addEventListener('change', function (
     reader.readAsText(file);
 });
 
-// --- Cargar código de ejemplo ---
-document.getElementById('loadExampleCodeButton').addEventListener('click', async function () {
+async function loadExampleCode(options = {}) {
+    const { silent = false } = options;
     try {
         const response = await fetch('assets/robots/Codigo_Ejemplo.txt');
         if (!response.ok) throw new Error('No se pudo cargar Codigo_Ejemplo.txt');
         const text = await response.text();
-        if (window.editor && typeof window.editor.setValue === 'function') {
-            window.editor.setValue(text);
-        } else if (typeof editor !== 'undefined' && typeof editor.setValue === 'function') {
-            editor.setValue(text);
+
+        const targetEditor = window.monacoEditor || editor || window.editor;
+        if (targetEditor && typeof targetEditor.setValue === 'function') {
+            targetEditor.setValue(text);
+            return true;
         }
+
+        throw new Error('Editor Monaco no disponible para cargar ejemplo.');
     } catch (err) {
         console.error(err);
-        alert('Error al cargar el código de ejemplo.');
+        if (!silent) {
+            alert('Error al cargar el código de ejemplo.');
+        }
+        return false;
     }
+}
+
+window.loadExampleCode = loadExampleCode;
+
+// --- Cargar código de ejemplo ---
+document.getElementById('loadExampleCodeButton').addEventListener('click', async function () {
+    await loadExampleCode({ silent: false });
 });
 
 // Handle window resize

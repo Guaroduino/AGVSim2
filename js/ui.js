@@ -167,9 +167,9 @@ export function updateTelemetry(data) {
         output += `PWM Derecho: ${data.motorPWMs.rightPWM} (${data.motorPWMs.rightDirForward ? 'Fwd' : 'Rev'})\n`;
     }
     if (data.sensorStates) {
-        output += `Sensor Izquierdo: ${data.sensorStates.left ? 'OFF' : 'ON'} Linea\n`;
-        output += `Sensor Centro: ${data.sensorStates.center ? 'OFF' : 'ON'} Linea\n`;
-        output += `Sensor Derecho: ${data.sensorStates.right ? 'OFF' : 'ON'} Linea\n`;
+        output += `Sensor Izquierdo: ${data.sensorStates.left ? 'ON' : 'OFF'} Linea\n`;
+        output += `Sensor Centro: ${data.sensorStates.center ? 'ON' : 'OFF'} Linea\n`;
+        output += `Sensor Derecho: ${data.sensorStates.right ? 'ON' : 'OFF'} Linea\n`;
     }
     if (data.simTime !== undefined) output += `Tiempo Sim: ${data.simTime.toFixed(2)}s\n`;
     if (data.outOfBounds) output += `Estado: ¡Robot fuera de pista!\n`;

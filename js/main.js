@@ -234,16 +234,40 @@ void loop() {
             initTrackEditor(mainAppInterface); // Track editor might generate a default track
 
             // Esperar a que el editor cargue la pista por defecto y exportarla al simulador
-            setTimeout(() => {
-                const elems = getDOMElements();
-                // Exportar la pista del editor al simulador
-                if (window.trackEditorInstance && typeof exportTrackAsCanvas === 'function') {
-                    const exportedCanvas = exportTrackAsCanvas();
-                    if (exportedCanvas) {
-                        mainAppInterface.loadTrackFromEditor(exportedCanvas, 0, 0, 0);
+            await new Promise(resolve => {
+                setTimeout(() => {
+                    if (window.trackEditorInstance && typeof exportTrackAsCanvas === 'function') {
+                        const exportedCanvas = exportTrackAsCanvas();
+                        if (exportedCanvas) {
+                            mainAppInterface.loadTrackFromEditor(exportedCanvas, 0, 0, 0);
+                        }
                     }
+                    resolve();
+                }, 500);
+            });
+
+            // Cargar por defecto robot para dejar la simulación lista al abrir.
+            if (typeof window.loadExampleRobot === 'function') {
+                await window.loadExampleRobot({ silent: true, apply: true });
+            }
+
+            // Esperar a que Mónaco cargue su instancia antes de cargar y compilar el código de ejemplo
+            const initCode = async () => {
+                let attempts = 0;
+                while (!window.monacoEditor && attempts < 50) {
+                    await new Promise(r => setTimeout(r, 100));
+                    attempts++;
                 }
-            }, 500); // Espera breve para asegurar que la pista esté cargada
+                if (typeof window.loadExampleCode === 'function') {
+                    await window.loadExampleCode({ silent: true });
+                }
+                if (window.monacoEditor && typeof window.monacoEditor.getValue === 'function') {
+                    loadUserCode(window.monacoEditor.getValue());
+                    updateCodeTypeDisplay(getCurrentCodeType());
+                }
+                clearSerial();
+            };
+            initCode();
 
             // Load a default track or wait for user
             // For now, let's assume track editor handles its default view.
