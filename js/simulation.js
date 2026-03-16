@@ -29,8 +29,8 @@ export class Simulation {
             timeStep: 0.02, // Corresponds to user code delay(20) for ~50 FPS
             maxRobotSpeedMPS: 0.5, // Max physical speed robot can achieve at 255 PWM
             motorEfficiency: 0.85, // Factor reducing max speed
-            motorImbalance: 0.0, // Differencial imbalance factor (-0.5 to 0.5)
-            motorResponseFactor: 0.1, // How quickly motors reach target speed (0-1, higher is faster)
+            motorImbalance: 0.01, // Differencial imbalance factor (-0.5 to 0.5)
+            motorResponseFactor: 0.05, // How quickly motors reach target speed (0-1, higher is faster)
             sensorNoiseProb: 0.0, // Probability (0-1) of a sensor flipping its reading
             movementPerturbFactor: 0.0, // Random perturbation to movement (0-1)
             motorDeadbandPWM: 10, // PWM values below this (absolute) are treated as 0
