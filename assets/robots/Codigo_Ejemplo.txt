@@ -1,48 +1,276 @@
-void setup() {
-  // Configurar sensores como entradas (Pines 2 y 3)
-  pinMode(2, INPUT);
-  pinMode(3, INPUT);
+#include <SPI.h>
+#include <Wire.h>
+#include <MFRC522.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-  // Configurar pines de motores como salidas (MX1616 / L298N)
-  pinMode(5, OUTPUT);
-  pinMode(6, OUTPUT);
-  pinMode(9, OUTPUT);
-  pinMode(10, OUTPUT);
+// ====================================================================
+// 1. CONFIGURACIÓN Y PINES (AJUSTES FINOS)
+// ====================================================================
+int vel = 100;
+int velinv = 50;
+int velPico = 40;
+int velGiro = 80;
+
+int tiempoGiroCiego = 300;       
+int tiempoRetrocesoTolva = 350;  
+int tiempoFrenoActivo = 100;     
+
+const int IN1 = 5;
+const int IN2 = 6;
+const int IN3 = 7;
+const int IN4 = 8;
+
+const int S_A_IZQ = 22; const int S_A_CEN = 23; const int S_A_DER = 24;
+const int S_B_IZQ = 25; const int S_B_CEN = 26; const int S_B_DER = 27;
+
+const byte SS_PIN = 53; const byte RST_PIN = 49;
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+Adafruit_SSD1306 pantalla(128, 64, &Wire, -1);
+
+// ====================================================================
+// 2. VARIABLES DE ESTADO Y MEMORIA
+// ====================================================================
+int pedidos[4] = {1, 0, 2, 0}; 
+int ladoTolva[4] = {1, 1, 1, 1}; // 1: Derecha, 2: Izquierda
+
+String uidInicio = "04-15-90-78";
+String uidPila[4] = {"04-79-89-FA", "04-89-21-F8", "04-A0-A2-D5", "04-D7-05-0A"};
+String uidRetorno = "04-6E-3B-3F";
+
+String ultimoUID = "";
+int ultimoDir = 2; 
+bool caraA_Activa = true; 
+String estadoActual = "";
+bool misionTerminada = false;
+
+unsigned long tiempoBloqueoRFID = 0;
+const int TIEMPO_COOLDOWN = 1500; 
+
+// ====================================================================
+// 3. FUNCIONES UTILITARIAS
+// ====================================================================
+void cambiarEstado(String nuevoEstado) {
+  if (estadoActual != nuevoEstado) {
+    estadoActual = nuevoEstado;
+    Serial.print("["); Serial.print(millis()); Serial.print(" ms] ESTADO: ");
+    Serial.println(estadoActual);
+  }
+}
+
+String hexByte(int v) {
+  String digits = "0123456789ABCDEF";
+  return String(digits[(v >> 4) & 0x0F]) + String(digits[v & 0x0F]);
+}
+
+String uidComoTexto() {
+  String uid = "";
+  for (int i = 0; i < mfrc522.uid.size; i++) {
+    if (i > 0) uid += "-";
+    uid += hexByte(mfrc522.uid.uidByte[i]);
+  }
+  return uid;
+}
+
+void mostrarPantalla(String l1, String l2) {
+  pantalla.clearDisplay();
+  pantalla.setCursor(0, 0);
+  pantalla.println(l1);
+  if (l2.length() <= 21) pantalla.println(l2);
+  else {
+    pantalla.println(l2.substring(0, 21));
+    pantalla.println(l2.substring(21, min((int)l2.length(), 42)));
+  }
+  pantalla.display();
+}
+
+// ====================================================================
+// 4. CONTROLADORES DE TRACCIÓN (TRUCO DEL ESPEJO)
+// ====================================================================
+void aplicarMotores(int vL, int vR) {
+  int realL = caraA_Activa ? vL : -vR;
+  int realR = caraA_Activa ? vR : -vL;
+
+  if (realL >= 0) { analogWrite(IN1, realL); analogWrite(IN2, 0); }
+  else { analogWrite(IN1, 0); analogWrite(IN2, -realL); }
+
+  if (realR >= 0) { analogWrite(IN3, realR); analogWrite(IN4, 0); }
+  else { analogWrite(IN3, 0); analogWrite(IN4, -realR); }
+}
+
+void detenerMotores() { aplicarMotores(0, 0); }
+
+void frenarMotores() {
+  analogWrite(IN1, 255); analogWrite(IN2, 255);
+  analogWrite(IN3, 255); analogWrite(IN4, 255);
+  delay(tiempoFrenoActivo);
+  detenerMotores(); 
+}
+
+// ====================================================================
+// 5. NAVEGACIÓN Y PERSPECTIVA
+// ====================================================================
+void controlLineaInteligente() {
+  int izq, cen, der;
+  if (caraA_Activa) {
+    izq = digitalRead(S_A_IZQ); cen = digitalRead(S_A_CEN); der = digitalRead(S_A_DER);
+  } else {
+    izq = digitalRead(S_B_DER); cen = digitalRead(S_B_CEN); der = digitalRead(S_B_IZQ);
+  }
+
+  if (cen == 1) { aplicarMotores(vel, vel); ultimoDir = 2; }
+  else if (izq == 1 && der == 0) { aplicarMotores(-velinv, vel); ultimoDir = 1; }
+  else if (izq == 0 && der == 1) { aplicarMotores(vel, -velinv); ultimoDir = 3; }
+  else if (izq == 0 && cen == 0 && der == 0) {
+    if (ultimoDir == 1) aplicarMotores(-velPico, velPico);
+    else if (ultimoDir == 3) aplicarMotores(velPico, -velPico);
+  }
+}
+
+void girar90(int direccion) {
+  int velIzq = (direccion == 1) ? velGiro : -velGiro;
+  int velDer = (direccion == 1) ? -velGiro : velGiro;
+  aplicarMotores(velIzq, velDer);
+  delay(tiempoGiroCiego); 
+  int cen = 0;
+  while(cen == 0) {
+    aplicarMotores(velIzq, velDer);
+    cen = caraA_Activa ? digitalRead(S_A_CEN) : digitalRead(S_B_CEN);
+    delay(10);
+  }
+  frenarMotores();
+}
+
+void darVuelta180() {
+  cambiarEstado("DANDO_VUELTA_180");
+  aplicarMotores(velGiro, -velGiro);
+  delay(600);
+  int cen = 0;
+  while(cen == 0) {
+    aplicarMotores(velGiro, -velGiro);
+    cen = digitalRead(S_A_CEN); 
+    delay(10);
+  }
+  frenarMotores();
+  caraA_Activa = true; 
+  ultimoDir = 2;
+  tiempoBloqueoRFID = millis();
+  mostrarPantalla("SENTIDO", "Corregido a Cara A");
+}
+
+// CORRECCIÓN: Ahora solo lee los sensores que están "adelante"
+bool detectarZonaNegra() {
+  int izq, cen, der;
+  if (caraA_Activa) {
+    // Si vamos de frente, la zona negra la debe ver la Cara A
+    izq = digitalRead(S_A_IZQ);
+    cen = digitalRead(S_A_CEN);
+    der = digitalRead(S_A_DER);
+  } else {
+    // Si vamos en reversa (espejo), la zona negra la debe ver la Cara B
+    izq = digitalRead(S_B_IZQ);
+    cen = digitalRead(S_B_CEN);
+    der = digitalRead(S_B_DER);
+  }
+  return (izq == 1 && cen == 1 && der == 1);
+}
+
+// ====================================================================
+// 6. COREOGRAFÍA Y RFID
+// ====================================================================
+String leerTag() {
+  if (millis() - tiempoBloqueoRFID < TIEMPO_COOLDOWN) return "";
+  if (!mfrc522.PICC_IsNewCardPresent()) return "";
+  if (!mfrc522.PICC_ReadCardSerial()) return "";
+  String uid = uidComoTexto();
+  mfrc522.PICC_HaltA();
+  if (uid != ultimoUID) { ultimoUID = uid; }
+  return uid;
+}
+
+void ejecutarCoreografia(int estacionId) {
+  cambiarEstado("1. ENTRADA");
+  frenarMotores(); delay(150);
+  int dirGiro = ladoTolva[estacionId];
+  girar90(dirGiro); 
+
+  while (pedidos[estacionId] > 0) {
+    cambiarEstado("2. BUSCANDO ZONA NEGRA");
+    while (!detectarZonaNegra()) { 
+      controlLineaInteligente(); 
+      delay(5); 
+    }
+    
+    cambiarEstado("3. MARTILLEO");
+    frenarMotores(); 
+    mostrarPantalla("TOLVA " + String(estacionId + 1), "Extrayendo...");
+    aplicarMotores(vel, vel); delay(300); 
+    frenarMotores(); delay(600); 
+    pedidos[estacionId]--;
+    
+    if (pedidos[estacionId] > 0) {
+      cambiarEstado("3.1 REACONDICIONAR");
+      aplicarMotores(-vel, -vel); delay(tiempoRetrocesoTolva); 
+      frenarMotores(); delay(400); 
+    }
+  }
+
+  cambiarEstado("4. INVERSION");
+  caraA_Activa = !caraA_Activa;
+  ultimoUID = ""; 
+
+  cambiarEstado("5. SALIDA LIMPIA");
+  aplicarMotores(vel, vel);
+  int cenLog = 0;
+  while(cenLog == 0) {
+    cenLog = caraA_Activa ? digitalRead(S_A_CEN) : digitalRead(S_B_CEN);
+    delay(5);
+  }
+
+  while (leerTag() == "") { controlLineaInteligente(); delay(5); }
+
+  cambiarEstado("6. REINCORPORACION");
+  frenarMotores(); delay(150);
+  girar90(dirGiro); 
+  tiempoBloqueoRFID = millis(); 
+}
+
+// ====================================================================
+// 7. RUTINAS PRINCIPALES
+// ====================================================================
+void setup() {
+  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT); pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
+  pinMode(S_A_IZQ, INPUT); pinMode(S_A_CEN, INPUT); pinMode(S_A_DER, INPUT);
+  pinMode(S_B_IZQ, INPUT); pinMode(S_B_CEN, INPUT); pinMode(S_B_DER, INPUT);
+  Serial.begin(9600);
+  Wire.begin();
+  pantalla.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  SPI.begin();
+  mfrc522.PCD_Init();
+  mostrarPantalla("SVP STEAM CLUB", "AGV Larense Listo");
 }
 
 void loop() {
-  // Leer sensores (1 = Negro, 0 = Blanco)
-  int s_izq = digitalRead(2);
-  int s_der = digitalRead(3);
+  if (misionTerminada) { detenerMotores(); return; }
 
-  if (s_izq == 1 && s_der == 1) {
-    // Ambos en la línea: Avanzar recto
-    avanzar();
-  } 
-  else if (s_izq == 1 && s_der == 0) {
-    // Solo el izquierdo ve negro: Girar a la izquierda
-    girarIzquierda();
-  } 
-  else if (s_izq == 0 && s_der == 1) {
-    // Solo el derecho ve negro: Girar a la derecha
-    girarDerecha();
+  String tagActual = leerTag();
+  int estacionId = -1;
+  for(int i = 0; i < 4; i++) { if (tagActual == uidPila[i]) estacionId = i; }
+
+  if (tagActual == uidInicio && millis() > 5000) {
+    frenarMotores();
+    mostrarPantalla("SVP STEAM CLUB", "FIN DE MISION");
+    misionTerminada = true;
   }
-  // Al no haber un "else", si ambos son 0, el robot seguirá haciendo 
-  // lo último que se le ordenó (avanzar o girar).
-}
-
-// Funciones de movimiento
-void avanzar() {
-  digitalWrite(5, HIGH); digitalWrite(6, LOW);
-  digitalWrite(9, HIGH); digitalWrite(10, LOW);
-}
-
-void girarIzquierda() {
-  digitalWrite(5, LOW);  digitalWrite(6, LOW);
-  digitalWrite(9, HIGH); digitalWrite(10, LOW);
-}
-
-void girarDerecha() {
-  digitalWrite(5, HIGH); digitalWrite(6, LOW);
-  digitalWrite(9, LOW);  digitalWrite(10, LOW);
+  else if (estacionId != -1 && pedidos[estacionId] > 0) {
+    ejecutarCoreografia(estacionId);
+  } 
+  else if (tagActual == uidRetorno && !caraA_Activa) {
+    darVuelta180();
+  } 
+  else {
+    cambiarEstado(caraA_Activa ? "NAVEGANDO_CARA_A" : "NAVEGANDO_CARA_B");
+    controlLineaInteligente();
+  }
+  delay(5);
 }

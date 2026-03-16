@@ -240,9 +240,21 @@ const resolveUIPin = (uiVal) => {
     return parseInt(uiVal);
 };
 
+const normalizePin = (pin) => {
+    if (typeof pin === 'number' && Number.isFinite(pin)) return pin;
+    if (typeof pin === 'string') {
+        const p = pin.trim();
+        if (p.startsWith('A')) return resolveUIPin(p);
+        const n = parseInt(p, 10);
+        if (!Number.isNaN(n)) return n;
+    }
+    return pin;
+};
+
 // Arduino API shim for user code
 const arduinoAPI = {
     pinMode: (pin, mode) => {
+        pin = normalizePin(pin);
         _pinModes[pin] = mode;
         _warnedPins.delete(pin); // Reset warning if pin is now configured
 
@@ -287,6 +299,7 @@ const arduinoAPI = {
         }
     },
     digitalRead: (pin) => {
+        pin = normalizePin(pin);
         if (!sharedSimulationState || !sharedSimulationState.robot || !sharedSimulationState.robot.connections) return 1;
 
         const conns = sharedSimulationState.robot.connections.sensorPins;
@@ -317,26 +330,30 @@ const arduinoAPI = {
         }
 
         let val = 0; // Default to 0 (off line)
-        if (pin === resolveUIPin(conns.left)) val = sharedSimulationState.robot.sensors.left;
-        else if (pin === resolveUIPin(conns.center)) val = sharedSimulationState.robot.sensors.center;
-        else if (pin === resolveUIPin(conns.right)) val = sharedSimulationState.robot.sensors.right;
-        else if (pin === resolveUIPin(conns.farLeft)) val = sharedSimulationState.robot.sensors.farLeft;
-        else if (pin === resolveUIPin(conns.farRight)) val = sharedSimulationState.robot.sensors.farRight;
-        else if (pin === resolveUIPin(conns.fullFarLeft)) val = sharedSimulationState.robot.sensors.fullFarLeft;
-        else if (pin === resolveUIPin(conns.fullFarRight)) val = sharedSimulationState.robot.sensors.fullFarRight;
-        else if (pin === resolveUIPin(conns.centerLeft)) val = sharedSimulationState.robot.sensors.centerLeft;
-        else if (pin === resolveUIPin(conns.centerRight)) val = sharedSimulationState.robot.sensors.centerRight;
+        const robotSensors = sharedSimulationState.robot.sensors || {};
+        let matchedDirectSensor = false;
+
+        // Generic resolution for all directly mapped sensors (left/right, center, rear mirrors, custom_N, etc.).
+        for (const [connKey, connVal] of Object.entries(conns)) {
+            if (pin === resolveUIPin(connVal) && Object.prototype.hasOwnProperty.call(robotSensors, connKey)) {
+                val = robotSensors[connKey] || 0;
+                matchedDirectSensor = true;
+                break;
+            }
+        }
 
         // Dynamic mapped generic sensors and buttons
-        for (const [connKey, connVal] of Object.entries(conns)) {
-            if (connKey.startsWith('pinPanelBtn_')) {
-                const btnIdx = connKey.replace('pinPanelBtn_', '');
-                if (pin === resolveUIPin(connVal)) {
-                    val = sharedSimulationState.robot.sensors[`btn_${btnIdx}`] || 0;
-                }
-            } else if (connKey.startsWith('custom_')) {
-                if (pin === resolveUIPin(connVal)) {
-                    val = sharedSimulationState.robot.sensors[connKey] || 0;
+        if (!matchedDirectSensor) {
+            for (const [connKey, connVal] of Object.entries(conns)) {
+                if (connKey.startsWith('pinPanelBtn_')) {
+                    const btnIdx = connKey.replace('pinPanelBtn_', '');
+                    if (pin === resolveUIPin(connVal)) {
+                        val = robotSensors[`btn_${btnIdx}`] || 0;
+                    }
+                } else if (connKey.startsWith('custom_')) {
+                    if (pin === resolveUIPin(connVal)) {
+                        val = robotSensors[connKey] || 0;
+                    }
                 }
             }
         }
@@ -348,9 +365,11 @@ const arduinoAPI = {
     },
     // Add digitalWrite for completeness, as some use it for full forward/reverse on L298N
     digitalWrite: (pin, value) => {
+        pin = normalizePin(pin);
         arduinoAPI.analogWrite(pin, value === arduinoAPI.HIGH ? 255 : 0);
     },
     analogWrite: (pin, value) => {
+        pin = normalizePin(pin);
         if (_pinModes[pin] !== arduinoAPI.OUTPUT) {
             if (!_warnedPins.has(pin)) {
                 ArduinoSerial.println(`Error: Pin ${pin} no configurado como OUTPUT. Usa pinMode(${pin}, OUTPUT) en setup().`);
@@ -616,6 +635,7 @@ function traducirArduinoAJS(codigoArduino) {
     const FN_RE = new RegExp(`\\b(?:void|${RETURN_TYPES})\\s+(\\w+)\\s*\\(([^)]*)\\)`, 'g');
     const ARG_TYPES = `${TYPES}|String`;
     const FN_ARG_RE = new RegExp(`\\b(?:const\\s+)?(?:${ARG_TYPES})\\s+[*&]*\\s*(\\w+)`, 'g');
+    const CAST_RE = new RegExp(`\\(\\s*(?:${ARG_TYPES})\\s*[*&]*\\s*\\)`, 'g');
 
     // 1. Extraer nombres de todas las funciones definidas por el usuario
     const userFunctions = [];
@@ -649,10 +669,18 @@ function traducirArduinoAJS(codigoArduino) {
         .replace(/\bAdafruit_VL53L0X\s+(\w+)\s*=\s*Adafruit_VL53L0X\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockAdafruitVL53L0X($2);')
         .replace(/\bAdafruit_VL53L0X\s+(\w+)\s*\(([^;]*)\)\s*;/g, 'let $1 = new MockAdafruitVL53L0X($2);')
         .replace(/\bAdafruit_VL53L0X\s+(\w+)\s*;/g, 'let $1 = new MockAdafruitVL53L0X();')
+        // Arrays de String en C++: String arr[3] = {"a", "b"}; -> let arr = ["a", "b"];
+        .replace(/\bconst\s+String\s+(\w+)\s*\[([^\]]*)\]\s*=\s*\{([\s\S]*?)\}\s*;/g, 'const $1 = [$3];')
+        .replace(/\bString\s+(\w+)\s*\[([^\]]*)\]\s*=\s*\{([\s\S]*?)\}\s*;/g, 'let $1 = [$3];')
+        // Array de String sin inicializar: String arr[10]; -> let arr = new Array(10);
+        .replace(/\bconst\s+String\s+(\w+)\s*\[([^\]]*)\]\s*;/g, 'const $1 = new Array($2);')
+        .replace(/\bString\s+(\w+)\s*\[([^\]]*)\]\s*;/g, 'let $1 = new Array($2);')
         // String en C++: convertir solo declaraciones, sin tocar String(...) constructor
         .replace(/\bconst\s+String\s+(\w+)\s*=\s*/g, 'const $1 = ')
         .replace(/\bString\s+(\w+)\s*=\s*/g, 'let $1 = ')
         .replace(/\bString\s+(\w+)\s*;/g, 'let $1;')
+        // Casts C/C++: (int)x, (float)y, (String)z -> eliminar para JS
+        .replace(CAST_RE, '')
         // Compat Arduino String: texto.length() -> texto.length
         .replace(/\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\.\s*length\s*\(\s*\)/g, '$1.length')
         // Reto de punteros: tcs.getRawData(&r,&g,&b,&c) -> destructuring assignment JS
