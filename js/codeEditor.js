@@ -335,11 +335,11 @@ const arduinoAPI = {
             if (sensorPins.includes(pin) && mode === arduinoAPI.OUTPUT) {
                 ArduinoSerial.println(`Advertencia: Pin ${pin} es un SENSOR en el editor, pero lo declaraste como OUTPUT. (Debug: pNum=${pin} sensorPins=${JSON.stringify(sensorPins)} ledPins=${JSON.stringify(ledPins)} custSensors=${JSON.stringify(sharedSimulationState.robot.customSensors)} conns=${JSON.stringify(conns.sensorPins)})`);
             }
-            if (ledPins.includes(pin) && mode === arduinoAPI.INPUT) {
-                ArduinoSerial.println(`Advertencia: Pin ${pin} es un LED en el editor, pero lo declaraste como INPUT.`);
+            if (ledPins.includes(pin) && (mode === arduinoAPI.INPUT || mode === arduinoAPI.INPUT_PULLUP)) {
+                ArduinoSerial.println(`Advertencia: Pin ${pin} es un LED en el editor, pero lo declaraste como INPUT o INPUT_PULLUP.`);
             }
-            if (motorPins.includes(pin) && mode === arduinoAPI.INPUT) {
-                ArduinoSerial.println(`Advertencia: Pin ${pin} es un MOTOR en el editor, pero lo declaraste como INPUT.`);
+            if (motorPins.includes(pin) && (mode === arduinoAPI.INPUT || mode === arduinoAPI.INPUT_PULLUP)) {
+                ArduinoSerial.println(`Advertencia: Pin ${pin} es un MOTOR en el editor, pero lo declaraste como INPUT o INPUT_PULLUP.`);
             }
         }
     },
@@ -351,9 +351,9 @@ const arduinoAPI = {
         // The user code pin might be A2 (which equates to 2 due to injected constants)
         // We match `pin` to the mapped value of whatever the user typed in the UI
 
-        if (_pinModes[pin] !== arduinoAPI.INPUT) {
+        if (_pinModes[pin] !== arduinoAPI.INPUT && _pinModes[pin] !== arduinoAPI.INPUT_PULLUP) {
             if (!_warnedPins.has(pin)) {
-                ArduinoSerial.println(`Error: Pin ${pin} no configurado como INPUT. Usa pinMode(${pin}, INPUT) en setup().`);
+                ArduinoSerial.println(`Error: Pin ${pin} no configurado como INPUT o INPUT_PULLUP. Usa pinMode(${pin}, INPUT) en setup().`);
                 _warnedPins.add(pin);
             }
             return 0; // Default to 0 (off line) if not configured
@@ -529,6 +529,7 @@ const arduinoAPI = {
     OCT: 8,
     BIN: 2,
     INPUT: "INPUT",
+    INPUT_PULLUP: "INPUT_PULLUP",
     OUTPUT: "OUTPUT",
     A0: 14, A1: 15, A2: 16, A3: 17, A4: 18, A5: 19, // Standard Arduino Uno mapping
     // Arduino math functions (global in C++, but need Math.* in JS)

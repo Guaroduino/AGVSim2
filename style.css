@@ -507,6 +507,10 @@ h2 {
     padding: 12px;
     box-sizing: border-box;
     overflow-y: auto;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     resize: vertical;
     /* Permitir ajustar altura */
     margin-bottom: 0.5em;

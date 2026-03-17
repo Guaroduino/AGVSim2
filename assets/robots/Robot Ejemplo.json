@@ -73,7 +73,8 @@
         "custom_0_MISO": "50",
         "custom_0_sym_MISO": "50",
         "custom_0_RST": "49",
-        "custom_1": "44"
+        "custom_1": "44",
+        "custom_1_sym": "45"
       },
       "driverType": "l298n",
       "motorPins": {

@@ -1,4 +1,4 @@
-#include <SPI.h>
+﻿#include <SPI.h>
 #include <Wire.h>
 #include <MFRC522.h>
 #include <Adafruit_GFX.h>
@@ -24,6 +24,14 @@ const int IN4 = 8;
 const int S_A_IZQ = 22; const int S_A_CEN = 23; const int S_A_DER = 24;
 const int S_B_IZQ = 25; const int S_B_CEN = 26; const int S_B_DER = 27;
 
+// Pines para Interfaz de Usuario
+const int BTN_SEL = 28;
+const int BTN_INC = 29;
+const int BTN_OK  = 30;
+
+const int LED_A = 44;
+const int LED_B = 45;
+
 const byte SS_PIN = 53; const byte RST_PIN = 49;
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 Adafruit_SSD1306 pantalla(128, 64, &Wire, -1);
@@ -31,7 +39,7 @@ Adafruit_SSD1306 pantalla(128, 64, &Wire, -1);
 // ====================================================================
 // 2. VARIABLES DE ESTADO Y MEMORIA
 // ====================================================================
-int pedidos[4] = {1, 0, 2, 0}; 
+int pedidos[4] = {0, 0, 0, 0}; 
 int ladoTolva[4] = {1, 1, 1, 1}; // 1: Derecha, 2: Izquierda
 
 String uidInicio = "04-15-90-78";
@@ -44,11 +52,20 @@ bool caraA_Activa = true;
 String estadoActual = "";
 bool misionTerminada = false;
 
+// Variables para el menú interactivo
+bool enMenu = true;
+int tolvaSeleccionada = 0;
+bool ultimoEstadoBtnSel = LOW;
+bool ultimoEstadoBtnInc = LOW;
+bool ultimoEstadoBtnOK = LOW;
+
+// Control de tiempos y cronómetros
 unsigned long tiempoBloqueoRFID = 0;
 const int TIEMPO_COOLDOWN = 1500; 
+unsigned long tiempoInicioMision = 0; 
 
 // ====================================================================
-// 3. FUNCIONES UTILITARIAS
+// 3. FUNCIONES UTILITARIAS E INTERFAZ
 // ====================================================================
 void cambiarEstado(String nuevoEstado) {
   if (estadoActual != nuevoEstado) {
@@ -82,6 +99,72 @@ void mostrarPantalla(String l1, String l2) {
     pantalla.println(l2.substring(21, min((int)l2.length(), 42)));
   }
   pantalla.display();
+}
+
+void actualizarLEDs() {
+  if (caraA_Activa) {
+    digitalWrite(LED_A, HIGH);
+    digitalWrite(LED_B, LOW);
+  } else {
+    digitalWrite(LED_A, LOW);
+    digitalWrite(LED_B, HIGH);
+  }
+}
+
+// ====================================================================
+// 3.5 LÓGICA DEL MENÚ INICIAL (TEXTOS ACORTADOS)
+// ====================================================================
+void ejecutarMenu() {
+  bool estadoBtnSel = digitalRead(BTN_SEL);
+  bool estadoBtnInc = digitalRead(BTN_INC);
+  bool estadoBtnOK  = digitalRead(BTN_OK);
+
+  if (estadoBtnSel == HIGH && ultimoEstadoBtnSel == LOW) {
+    tolvaSeleccionada++;
+    if (tolvaSeleccionada > 3) tolvaSeleccionada = 0;
+  }
+
+  if (estadoBtnInc == HIGH && ultimoEstadoBtnInc == LOW) {
+    pedidos[tolvaSeleccionada]++;
+    if (pedidos[tolvaSeleccionada] > 5) pedidos[tolvaSeleccionada] = 0;
+  }
+
+  if (estadoBtnOK == HIGH && ultimoEstadoBtnOK == LOW) {
+    enMenu = false; 
+    misionTerminada = false; 
+    tiempoInicioMision = millis(); 
+    
+    mostrarPantalla("SVP STEAM CLUB", "INICIANDO...");
+    
+    aplicarMotores(vel, vel);
+    delay(500); 
+    return;
+  }
+
+  ultimoEstadoBtnSel = estadoBtnSel;
+  ultimoEstadoBtnInc = estadoBtnInc;
+  ultimoEstadoBtnOK  = estadoBtnOK;
+
+  pantalla.clearDisplay();
+  pantalla.setCursor(0, 0);
+  pantalla.println("== PEDIDO ==");
+  
+  // Formato comprimido: "> TOLVA1=0"
+  for (int i = 0; i < 4; i++) {
+    if (i == tolvaSeleccionada) pantalla.print("> ");
+    else pantalla.print("  ");
+    
+    pantalla.print("TOLVA"); 
+    pantalla.print(i + 1);
+    pantalla.print("="); 
+    pantalla.println(pedidos[i]);
+  }
+  
+  pantalla.println("-------------");
+  pantalla.println("28:> 29:+ 30:GO");
+  pantalla.display();
+  
+  delay(50); 
 }
 
 // ====================================================================
@@ -153,27 +236,24 @@ void darVuelta180() {
   }
   frenarMotores();
   caraA_Activa = true; 
+  actualizarLEDs(); 
   ultimoDir = 2;
   tiempoBloqueoRFID = millis();
-  mostrarPantalla("SENTIDO", "Corregido a Cara A");
+  mostrarPantalla("SENTIDO", "Cara A Frente");
 }
 
-// CORRECCIÓN: Ahora solo lee los sensores que están "adelante" con un pequeño buffer anti-ruido
 bool detectarZonaNegra() {
   int izq, cen, der;
   if (caraA_Activa) {
-    // Si vamos de frente, la zona negra la debe ver la Cara A
     izq = digitalRead(S_A_IZQ);
     cen = digitalRead(S_A_CEN);
     der = digitalRead(S_A_DER);
   } else {
-    // Si vamos en reversa (espejo), la zona negra la debe ver la Cara B
     izq = digitalRead(S_B_IZQ);
     cen = digitalRead(S_B_CEN);
     der = digitalRead(S_B_DER);
   }
   
-  // Si encontramos negro, confirmamos repetidas veces para evitar falsos positivos
   if (izq == 1 && cen == 1 && der == 1) {
     for (int i = 0; i < 5; i++) {
        delay(5);
@@ -208,14 +288,14 @@ String leerTag() {
 
 void ejecutarCoreografia(int estacionId) {
   cambiarEstado("1. ENTRADA");
-  mostrarPantalla("ESTACION " + String(estacionId + 1), "Entrando a Tolva...");
+  mostrarPantalla("TOLVA " + String(estacionId + 1), "Entrando...");
   frenarMotores(); delay(150);
   int dirGiro = ladoTolva[estacionId];
   girar90(dirGiro); 
 
   while (pedidos[estacionId] > 0) {
     cambiarEstado("2. BUSCANDO ZONA NEGRA");
-    mostrarPantalla("ESPERANDO CARGA", "Faltan: " + String(pedidos[estacionId]));
+    mostrarPantalla("CARGANDO", "Faltan: " + String(pedidos[estacionId]));
     while (!detectarZonaNegra()) { 
       controlLineaInteligente(); 
       delay(5); 
@@ -230,19 +310,20 @@ void ejecutarCoreografia(int estacionId) {
     
     if (pedidos[estacionId] > 0) {
       cambiarEstado("3.1 REACONDICIONAR");
-      mostrarPantalla("TOLVA " + String(estacionId + 1), "Retrocediendo...");
+      mostrarPantalla("TOLVA " + String(estacionId + 1), "Atrasando...");
       aplicarMotores(-vel, -vel); delay(tiempoRetrocesoTolva); 
       frenarMotores(); delay(400); 
     }
   }
 
   cambiarEstado("4. INVERSION");
-  mostrarPantalla("INVERSION", "Invirtiendo cara...");
+  mostrarPantalla("INVERSION", "Espejo...");
   caraA_Activa = !caraA_Activa;
+  actualizarLEDs(); 
   ultimoUID = ""; 
 
   cambiarEstado("5. SALIDA LIMPIA");
-  mostrarPantalla("ESTACION " + String(estacionId + 1), "Saliendo...");
+  mostrarPantalla("TOLVA " + String(estacionId + 1), "Saliendo...");
   aplicarMotores(vel, vel);
   int cenLog = 0;
   while(cenLog == 0) {
@@ -253,7 +334,7 @@ void ejecutarCoreografia(int estacionId) {
   while (leerTag() == "") { controlLineaInteligente(); delay(5); }
 
   cambiarEstado("6. REINCORPORACION");
-  mostrarPantalla("NAVEGACION", caraA_Activa ? "Cara A activa" : "Cara B activa");
+  mostrarPantalla("NAVEGANDO", caraA_Activa ? "Cara A" : "Cara B");
   frenarMotores(); delay(150);
   girar90(dirGiro); 
   tiempoBloqueoRFID = millis(); 
@@ -266,25 +347,43 @@ void setup() {
   pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT); pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
   pinMode(S_A_IZQ, INPUT); pinMode(S_A_CEN, INPUT); pinMode(S_A_DER, INPUT);
   pinMode(S_B_IZQ, INPUT); pinMode(S_B_CEN, INPUT); pinMode(S_B_DER, INPUT);
+  
+  pinMode(BTN_SEL, INPUT); 
+  pinMode(BTN_INC, INPUT); 
+  pinMode(BTN_OK, INPUT); 
+  pinMode(LED_A, OUTPUT);
+  pinMode(LED_B, OUTPUT);
+  
   Serial.begin(9600);
   Wire.begin();
   pantalla.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   SPI.begin();
   mfrc522.PCD_Init();
-  mostrarPantalla("SVP STEAM CLUB", "AGV Larense Listo");
+  
+  actualizarLEDs(); 
 }
 
 void loop() {
+  if (enMenu) {
+    ejecutarMenu();
+    return; 
+  }
+
   if (misionTerminada) { detenerMotores(); return; }
 
   String tagActual = leerTag();
   int estacionId = -1;
   for(int i = 0; i < 4; i++) { if (tagActual == uidPila[i]) estacionId = i; }
 
-  if (tagActual == uidInicio && millis() > 5000) {
+  if (tagActual == uidInicio && (millis() - tiempoInicioMision) > 5000) {
     frenarMotores();
-    mostrarPantalla("SVP STEAM CLUB", "FIN DE MISION");
-    misionTerminada = true;
+    mostrarPantalla("FIN MISION", "Volviendo al Menu");
+    
+    for(int i = 0; i < 4; i++) pedidos[i] = 0;
+    
+    delay(3000); 
+    enMenu = true; 
+    return;
   }
   else if (estacionId != -1 && pedidos[estacionId] > 0) {
     ejecutarCoreografia(estacionId);

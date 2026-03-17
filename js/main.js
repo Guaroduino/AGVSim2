@@ -853,19 +853,24 @@ void loop() {
         const y = adjustedPx_y * (canvas.height / actualHeight);
     
         const count = btns.length;
-        const startX = 50;
-        const endX = 140;
+        const panelWidth = 180;
+        const panelHeight = 80;
+        const panelX = 16;
+        const panelY = canvas.height - panelHeight - 14;
+
+        const startX = panelX + 76;
+        const endX = panelX + panelWidth - 16;
         const step = (endX - startX) / (count + 1);
-    
+
         for (let i=0; i<count; i++) {
-            const cx = 40 + startX + step * (i + 1);
-            const cy = canvas.height - 90 - 10;
+            const cx = startX + step * (i + 1);
+            const cy = panelY + panelHeight / 2;
             const r = (btns[i].size || 8) / 2;
-    
+
             const dx = x - cx;
             const dy = y - cy;
             // Pad hit area by a few pixels
-            if (dx*dx + dy*dy <= (r + 8) * (r + 8)) {
+            if (dx*dx + dy*dy <= (r + 12) * (r + 12)) {
                 return i;
             }
         }
@@ -897,7 +902,7 @@ void loop() {
         if (btnIdx !== -1) {
             simulationInstance.robot.sensors['btn_' + btnIdx] = 1;
             // update UI immediately
-            if (!simulationInterval) {
+            if (!simulationRunning) {
                 simulationInstance.draw(elems.simulationDisplayCanvas.getContext('2d'), elems.simulationDisplayCanvas.width, elems.simulationDisplayCanvas.height);
             }
             return; // We consumed the click for a button
@@ -949,7 +954,7 @@ void loop() {
                     redraw = true;
                 }
             }
-            if (redraw && !simulationInterval) {
+            if (redraw && !simulationRunning) {
                 simulationInstance.draw(elems.simulationDisplayCanvas.getContext('2d'), elems.simulationDisplayCanvas.width, elems.simulationDisplayCanvas.height);
             }
         }
@@ -1004,7 +1009,7 @@ void loop() {
             const btnIdx = checkPanelButtonClick(elems.simulationDisplayCanvas, event);
             if (btnIdx !== -1) {
                 simulationInstance.robot.sensors['btn_' + btnIdx] = 1;
-                if (!simulationInterval) {
+                if (!simulationRunning) {
                     simulationInstance.draw(elems.simulationDisplayCanvas.getContext('2d'), elems.simulationDisplayCanvas.width, elems.simulationDisplayCanvas.height);
                 }
                 event.preventDefault(); // We consumed the touch for a button
