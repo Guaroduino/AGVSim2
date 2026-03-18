@@ -26,12 +26,18 @@ let draggedElement = null;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
 let dragMoved = false;
+let suppressNextClick = false;
 let trackZoom = 1.0;
 let trackPanX = 0;
 let trackPanY = 0;
 let isPanningTrack = false;
 let trackPanStartX = 0;
 let trackPanStartY = 0;
+
+const TRANSFORM_HANDLE_HITBOX = 28;
+const TRANSFORM_HANDLE_RADIUS = 7;
+const TRANSFORM_ROTATE_HANDLE_OFFSET = 28;
+const TRANSFORM_ROTATE_HANDLE_RADIUS = 8;
 
 function toHexByte(value) {
     return (Number(value) & 0xFF).toString(16).toUpperCase().padStart(2, '0');
@@ -87,6 +93,7 @@ function hydrateInteractiveElements(rawElements) {
             height: Math.max(1, Number(raw.height) || 50),
             value: raw.value ?? '',
             color: raw.color || '#0000ff',
+            shape: raw.shape || 'rect',
             rotation: Number(raw.rotation) || 0
         };
 
@@ -119,17 +126,17 @@ function resizeTrackEditorCanvas() {
     const container = editorCanvas.parentElement;
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
-    // Use the *minimum* of width and height so the square fits entirely in the container
-    const size = Math.max(Math.min(containerRect.width, containerRect.height), 320);
-
-    editorCanvas.width = size;
-    editorCanvas.height = size;
-    // Eliminamos la asignación de px rígida al style para que object-fit y flexbox hagan su trabajo
+    
+    // Usar todo el ancho y alto del contenedor, sea rectangular o cuadrado
+    editorCanvas.width = Math.max(1, Math.round(containerRect.width));
+    editorCanvas.height = Math.max(1, Math.round(containerRect.height));
+    
+    // Eliminamos la asignación de px rígida al style
     editorCanvas.style.width = '100%';
     editorCanvas.style.height = '100%';
 
-    const cellSize = size / Math.max(currentGridSize.rows, currentGridSize.cols);
-    renderEditor(cellSize);
+    // Ajustar zoom a extents al redimensionar
+    zoomToExtents();
 }
 
 export function initTrackEditor(appInterface) {
@@ -329,11 +336,13 @@ export function initTrackEditor(appInterface) {
     });
 
     editorCanvas.addEventListener('mousedown', (event) => {
+        if (isPanningTrack || event.button === 1) return;
         const coords = getCanvasCoords(event);
         if (!coords) return;
         const { p_x, p_y } = coords;
         
         dragMoved = false;
+        suppressNextClick = false;
 
         if (currentToolMode === 'move') { 
             if (selectedInteractiveElement) {
@@ -347,12 +356,13 @@ export function initTrackEditor(appInterface) {
                 let lx = dx * Math.cos(angle) - dy * Math.sin(angle);
                 let ly = dx * Math.sin(angle) + dy * Math.cos(angle);
                 
-                // We use TRACK_PART_SIZE_PX scale space, so handles are scaled there.
-                // But the drawing size is scaled visually. The hitbox should be absolute in track space.
-                const hs = 25; // 25 px radius for hitbox in track coordinate space
+                const hs = TRANSFORM_HANDLE_HITBOX; // Hitbox in local track coordinate space
+                const hs2 = hs * hs;
                 
                 // Rotation handle (Top center + offset)
-                if (Math.abs(lx) <= hs && Math.abs(ly - (-el.height/2 - 50)) <= hs) {
+                const rdx = lx;
+                const rdy = ly - (-el.height / 2 - TRANSFORM_ROTATE_HANDLE_OFFSET);
+                if ((rdx * rdx + rdy * rdy) <= hs2) {
                     isDraggingInteractive = true;
                     draggedElement = el;
                     dragTransformMode = 'rotate';
@@ -360,14 +370,45 @@ export function initTrackEditor(appInterface) {
                     startElemW = el.width; startElemH = el.height;
                     startRotAngle = el.rotation || 0;
                     dragStartAngle = Math.atan2(p_y - cy, p_x - cx) * 180 / Math.PI;
+                    suppressNextClick = true;
                     return;
                 }
                 
-                // Scale handles (corners)
-                if (Math.abs(lx - (-el.width/2)) <= hs && Math.abs(ly - (-el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_tl'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
-                if (Math.abs(lx - (el.width/2)) <= hs && Math.abs(ly - (-el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_tr'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
-                if (Math.abs(lx - (-el.width/2)) <= hs && Math.abs(ly - (el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_bl'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
-                if (Math.abs(lx - (el.width/2)) <= hs && Math.abs(ly - (el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_br'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
+                // Scale handles (corners and edges): pick closest to avoid overlaps.
+                const handleCandidates = [
+                    { mode: 'scale_tl', hx: -el.width / 2, hy: -el.height / 2 },
+                    { mode: 'scale_tr', hx: el.width / 2, hy: -el.height / 2 },
+                    { mode: 'scale_bl', hx: -el.width / 2, hy: el.height / 2 },
+                    { mode: 'scale_br', hx: el.width / 2, hy: el.height / 2 },
+                    { mode: 'scale_t', hx: 0, hy: -el.height / 2 },
+                    { mode: 'scale_b', hx: 0, hy: el.height / 2 },
+                    { mode: 'scale_l', hx: -el.width / 2, hy: 0 },
+                    { mode: 'scale_r', hx: el.width / 2, hy: 0 }
+                ];
+                let closestHandle = null;
+                let closestD2 = Infinity;
+                for (const h of handleCandidates) {
+                    const ddx = lx - h.hx;
+                    const ddy = ly - h.hy;
+                    const d2 = ddx * ddx + ddy * ddy;
+                    if (d2 <= hs2 && d2 < closestD2) {
+                        closestD2 = d2;
+                        closestHandle = h;
+                    }
+                }
+                if (closestHandle) {
+                    isDraggingInteractive = true;
+                    draggedElement = el;
+                    dragTransformMode = closestHandle.mode;
+                    dragStartX = p_x;
+                    dragStartY = p_y;
+                    startElemX = el.x;
+                    startElemY = el.y;
+                    startElemW = el.width;
+                    startElemH = el.height;
+                    suppressNextClick = true;
+                    return;
+                }
             }
 
             let found = null;
@@ -405,6 +446,7 @@ export function initTrackEditor(appInterface) {
                      if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
                      if (elems.intSettColor) elems.intSettColor.value = found.color || '#0000ff';
                      if (elems.intSettRotation) elems.intSettRotation.value = found.rotation || 0;
+                     if (elems.obstacleShape) elems.obstacleShape.value = found.shape || 'rect';
                      updateInteractiveUI(found.type, elems);
                 }
             } else {
@@ -439,15 +481,46 @@ export function initTrackEditor(appInterface) {
             let dy = p_y - dragStartY;
             
             let angle = el.rotation ? -el.rotation * Math.PI / 180 : 0;
-            let ldx = dx * Math.cos(angle) - dy * Math.sin(angle);
-            let ldy = dx * Math.sin(angle) + dy * Math.cos(angle);
-            
+            let ldx = dx * Math.cos(angle) + dy * Math.sin(angle);
+            let ldy = -dx * Math.sin(angle) + dy * Math.cos(angle);
+
             let sW = startElemW;
             let sH = startElemH;
-            
-            if (dragTransformMode.includes('l')) { sW = startElemW - ldx * 2; } else { sW = startElemW + ldx * 2; }
-            if (dragTransformMode.includes('t')) { sH = startElemH - ldy * 2; } else { sH = startElemH + ldy * 2; }
-            
+
+            if (['scale_t', 'scale_b', 'scale_l', 'scale_r'].includes(dragTransformMode)) {
+                if (dragTransformMode === 'scale_l') sW = startElemW - ldx * 2;
+                if (dragTransformMode === 'scale_r') sW = startElemW + ldx * 2;
+                if (dragTransformMode === 'scale_t') sH = startElemH - ldy * 2;
+                if (dragTransformMode === 'scale_b') sH = startElemH + ldy * 2;
+            } else {
+                // Uniform scale from corners using pointer projection on the
+                // active corner diagonal to better follow cursor drag intent.
+                const startCx = startElemX + startElemW / 2;
+                const startCy = startElemY + startElemH / 2;
+                const pdx = p_x - startCx;
+                const pdy = p_y - startCy;
+                const plx = pdx * Math.cos(angle) - pdy * Math.sin(angle);
+                const ply = pdx * Math.sin(angle) + pdy * Math.cos(angle);
+
+                const halfW0 = Math.max(1, startElemW / 2);
+                const halfH0 = Math.max(1, startElemH / 2);
+                const nx = plx / halfW0;
+                const ny = ply / halfH0;
+
+                let dirX = 1;
+                let dirY = 1;
+                if (dragTransformMode === 'scale_tl') { dirX = -1; dirY = -1; }
+                if (dragTransformMode === 'scale_tr') { dirX = 1; dirY = -1; }
+                if (dragTransformMode === 'scale_bl') { dirX = -1; dirY = 1; }
+                if (dragTransformMode === 'scale_br') { dirX = 1; dirY = 1; }
+
+                const diagonalProjection = (nx * dirX + ny * dirY) / Math.SQRT2;
+                const factor = Math.max(0.05, diagonalProjection / Math.SQRT2);
+
+                sW = startElemW * factor;
+                sH = startElemH * factor;
+            }
+
             if (sH < 10) sH = 10;
             if (sW < 10) sW = 10;
             
@@ -479,6 +552,11 @@ export function initTrackEditor(appInterface) {
     });
 
     editorCanvas.addEventListener('click', (event) => {
+        if (isPanningTrack || event.button === 1) return;
+        if (suppressNextClick) {
+            suppressNextClick = false;
+            return;
+        }
         if (dragMoved) {
             dragMoved = false;
             return; // Skip click logic if we just finished a drag
@@ -487,26 +565,12 @@ export function initTrackEditor(appInterface) {
     });
 
     editorCanvas.addEventListener('dblclick', (event) => {
+        if (isPanningTrack || event.button === 1) return;
         onGridDoubleClick(event);
     });
 
     // Responsive resize for track editor canvas
-    window.addEventListener('resize', () => {
-        if (!editorCanvas) return;
-        // Get container size and use width for both dimensions
-        const container = editorCanvas.parentElement;
-        if (!container) return;
-        const containerRect = container.getBoundingClientRect();
-        // Use the smallest dimension for square aspect ratio
-        const size = Math.max(Math.min(containerRect.width, containerRect.height), 320); // Minimum for mobile
-        editorCanvas.width = size;
-        editorCanvas.height = size;
-        editorCanvas.style.width = '100%';
-        editorCanvas.style.height = '100%';
-        // Calculate dynamic cell size and re-render
-        const cellSize = size / Math.max(currentGridSize.rows, currentGridSize.cols);
-        renderEditor(cellSize);
-    });
+    window.addEventListener('resize', resizeTrackEditorCanvas);
 }
 
 function loadTrackPartAssets(callback) {
@@ -562,6 +626,14 @@ function populateTrackPartsPalette(paletteElement) {
 
         imgElement.addEventListener('click', () => {
             const elems = getDOMElements();
+            
+            // Check if already selected to allow toggling off
+            if (imgElement.classList.contains('selected')) {
+                imgElement.classList.remove('selected');
+                selectedTrackPart = null;
+                return;
+            }
+
             document.querySelectorAll('#trackPartsPalette img').forEach(p => p.classList.remove('selected'));
             imgElement.classList.add('selected');
 
@@ -571,6 +643,24 @@ function populateTrackPartsPalette(paletteElement) {
                 selectedTrackPart = null;
                 alert(`Imagen para '${partInfo.name}' no disponible.`);
             }
+
+            // Deselect any interactive tools when selecting a track part
+            const tools = [
+                { id: 'toolModeRFID', mode: 'rfid' },
+                { id: 'toolModeColor', mode: 'color' },
+                { id: 'toolModeHopper', mode: 'hopper' },
+                { id: 'toolModeObstacle', mode: 'obstacle' },
+                { id: 'toolModeMoveInt', mode: 'move' },
+                { id: 'toolModeEraseInt', mode: 'erase' }
+            ];
+            currentToolMode = null;
+            tools.forEach(other => {
+                const ob = document.getElementById(other.id);
+                if (ob) { ob.style.boxShadow = ''; ob.style.backgroundColor = ''; ob.style.color = ''; }
+            });
+            updateInteractiveUI(null, elems);
+            selectedInteractiveElement = null;
+            renderEditor();
         });
         imgContainer.appendChild(imgElement);
         paletteElement.appendChild(imgContainer);
@@ -580,33 +670,7 @@ function populateTrackPartsPalette(paletteElement) {
 function setupGrid() {
     grid = Array(currentGridSize.rows).fill(null).map(() => Array(currentGridSize.cols).fill(null));
     if (editorCanvas) {
-        // Get container size and use width for both dimensions
-        const container = editorCanvas.parentElement;
-        if (!container) {
-            console.error("[DEBUG] No container found for editor canvas");
-            return;
-        }
-
-        const containerRect = container.getBoundingClientRect();
-        console.log("[DEBUG] Container size:", {
-            width: containerRect.width,
-            height: containerRect.height
-        });
-
-        // Force a size to keep simulation resolution crisp, 
-        // HTML CSS object-fit will compress it visually if needed
-        const size = Math.max(Math.min(containerRect.width, containerRect.height) || 1200, 1200);
-        console.log("[DEBUG] Setting canvas size to:", size);
-
-        editorCanvas.width = size;
-        editorCanvas.height = size;
-        editorCanvas.style.width = '100%';
-        editorCanvas.style.height = '100%';
-
-        // Calculate dynamic cell size and render immediately
-        const cellSize = size / Math.max(currentGridSize.rows, currentGridSize.cols);
-        console.log("[DEBUG] Cell size calculated:", cellSize);
-        renderEditor(cellSize);
+        resizeTrackEditorCanvas();
     }
 }
 
@@ -623,12 +687,19 @@ function renderEditor(cellSize) {
 
     // Calculate cellSize if not provided or ensure it's appropriate for the canvas size
     if (!cellSize) {
-        cellSize = editorCanvas.width / Math.max(currentGridSize.rows, currentGridSize.cols);
+        cellSize = Math.min(
+            editorCanvas.width / currentGridSize.cols,
+            editorCanvas.height / currentGridSize.rows
+        );
     }
 
     // Clear the canvas with white background
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, editorCanvas.width, editorCanvas.height);
+
+    ctx.save();
+    ctx.translate(trackPanX, trackPanY);
+    ctx.scale(trackZoom, trackZoom);
 
     // Draw grid and track parts
     for (let r = 0; r < currentGridSize.rows; r++) {
@@ -669,6 +740,8 @@ function renderEditor(cellSize) {
     ctx.strokeRect(0, 0, currentGridSize.cols * cellSize, currentGridSize.rows * cellSize);
 
     drawInteractiveElements(ctx, cellSize / TRACK_PART_SIZE_PX);
+    
+    ctx.restore();
 
     if (AVAILABLE_TRACK_PARTS.length === 0 && editorCanvas.width > 0) {
         ctx.fillStyle = "rgba(0,0,0,0.7)";
@@ -681,32 +754,27 @@ function renderEditor(cellSize) {
 function getCanvasCoords(event) {
     if (!editorCanvas) return null;
     const rect = editorCanvas.getBoundingClientRect();
-    const renderWidth = rect.width;
-    const renderHeight = rect.height;
-    const canvasAspect = editorCanvas.width / editorCanvas.height;
-    const containerAspect = renderWidth / renderHeight;
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    
+    // Obtenemos coordenadas relativas al canvas (que ocupa el 100% del contenedor)
+    const x_relative = (event.clientX - rect.left) * (editorCanvas.width / rect.width);
+    const y_relative = (event.clientY - rect.top) * (editorCanvas.height / rect.height);
 
-    let actualWidth, actualHeight, offsetX, offsetY;
-    if (containerAspect > canvasAspect) {
-        actualHeight = renderHeight;
-        actualWidth = renderHeight * canvasAspect;
-        offsetX = (renderWidth - actualWidth) / 2;
-        offsetY = 0;
-    } else {
-        actualWidth = renderWidth;
-        actualHeight = renderWidth / canvasAspect;
-        offsetX = 0;
-        offsetY = (renderHeight - actualHeight) / 2;
-    }
+    let x_canvas = x_relative;
+    let y_canvas = y_relative;
 
-    const x_relative = event.clientX - rect.left - offsetX;
-    const y_relative = event.clientY - rect.top - offsetY;
+    // Aplicar inverso del Paneo y Zoom
+    x_canvas = (x_canvas - trackPanX) / trackZoom;
+    y_canvas = (y_canvas - trackPanY) / trackZoom;
 
-    const scale = editorCanvas.width / actualWidth;
-    const x_canvas = x_relative * scale;
-    const y_canvas = y_relative * scale;
+    // Calcular el tamaño local de la grilla usado al renderizar
+    const cellSize = Math.min(
+        editorCanvas.width / currentGridSize.cols,
+        editorCanvas.height / currentGridSize.rows
+    );
 
-    const exportScale = (currentGridSize.cols * TRACK_PART_SIZE_PX) / editorCanvas.width;
+    // Mapear de coordenadas visuales (cellSize) a físicas (TRACK_PART_SIZE_PX)
+    const exportScale = TRACK_PART_SIZE_PX / cellSize;
     const p_x = x_canvas * exportScale;
     const p_y = y_canvas * exportScale;
 
@@ -716,43 +784,11 @@ function getCanvasCoords(event) {
 function onGridSingleClick(event) {
     if (!editorCanvas) return;
 
-    const rect = editorCanvas.getBoundingClientRect();
+    const coords = getCanvasCoords(event);
+    if (!coords) return;
+    const { x_canvas, y_canvas, p_x, p_y } = coords;
 
-    // Con object-fit: contain y un canvas siempre cuadrado (1200x1200 o similar),
-    // debemos encontrar el área real dibujada (el cuadrado central)
-    const renderWidth = rect.width;
-    const renderHeight = rect.height;
-    const canvasAspect = editorCanvas.width / editorCanvas.height; // Debería ser 1
-    const containerAspect = renderWidth / renderHeight;
-
-    let actualWidth, actualHeight, offsetX, offsetY;
-
-    if (containerAspect > canvasAspect) {
-        // El contenedor es más ancho que el canvas -> letterbox a los lados
-        actualHeight = renderHeight;
-        actualWidth = renderHeight * canvasAspect;
-        offsetX = (renderWidth - actualWidth) / 2;
-        offsetY = 0;
-    } else {
-        // El contenedor es más alto que el canvas -> letterbox arriba/abajo
-        actualWidth = renderWidth;
-        actualHeight = renderWidth / canvasAspect;
-        offsetX = 0;
-        offsetY = (renderHeight - actualHeight) / 2;
-    }
-
-    const x_relative = event.clientX - rect.left - offsetX;
-    const y_relative = event.clientY - rect.top - offsetY;
-
-    const scale = editorCanvas.width / actualWidth;
-    const x_canvas = x_relative * scale;
-    const y_canvas = y_relative * scale;
-
-    const exportScale = (currentGridSize.cols * TRACK_PART_SIZE_PX) / editorCanvas.width;
-    const p_x = x_canvas * exportScale;
-    const p_y = y_canvas * exportScale;
-
-    // --- INTERACTIVE ELEMENTS LOGIC --- 
+    // --- INTERACTIVE ELEMENTS LOGIC ---
     if (currentToolMode && currentToolMode !== 'erase' && currentToolMode !== 'move' && (!event.detail || event.detail === 1)) {
         const elems = getDOMElements();
         let w = parseFloat(elems?.intSettWidth?.value) || 100;
@@ -760,6 +796,7 @@ function onGridSingleClick(event) {
         const rawValue = String(elems?.intSettValue?.value ?? '').trim();
         let val = Number.isFinite(parseInt(rawValue, 10)) ? parseInt(rawValue, 10) : 0;
         let col = elems?.intSettColor?.value || '#0000ff';
+        let shape = elems?.obstacleShape?.value || 'rect';
 
         if (currentToolMode === 'rfid') {
             val = normalizeRfidUid(rawValue) || generateAutoRfidUid();
@@ -776,13 +813,12 @@ function onGridSingleClick(event) {
             height: h,
             value: val,
             color: col,
+            shape: shape,
             rotation: 0
         });
         // Keep creation settings independent from already placed objects.
         selectedInteractiveElement = null;
-        document.querySelectorAll('#trackPartsPalette img').forEach(p => p.classList.remove('selected'));
-        selectedTrackPart = null;
-
+        
         renderEditor();
         return; 
     }
@@ -791,7 +827,14 @@ function onGridSingleClick(event) {
         let found = null;
         for(let i = interactiveElements.length-1; i>=0; i--) {
             let e = interactiveElements[i];
-            if (p_x >= e.x && p_x <= e.x + e.width && p_y >= e.y && p_y <= e.y + e.height) {
+            const cx = e.x + e.width / 2;
+            const cy = e.y + e.height / 2;
+            const dx = p_x - cx;
+            const dy = p_y - cy;
+            const angle = e.rotation ? -e.rotation * Math.PI / 180 : 0;
+            const lx = dx * Math.cos(angle) - dy * Math.sin(angle);
+            const ly = dx * Math.sin(angle) + dy * Math.cos(angle);
+            if (lx >= -e.width / 2 && lx <= e.width / 2 && ly >= -e.height / 2 && ly <= e.height / 2) {
                 found = e; break;
             }
         }
@@ -803,6 +846,7 @@ function onGridSingleClick(event) {
                  if (elems.intSettLength) elems.intSettLength.value = found.height;
                  if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
                  if (elems.intSettColor) elems.intSettColor.value = found.color || '#0000ff';
+                 if (elems.obstacleShape) elems.obstacleShape.value = found.shape || 'rect';
                  updateInteractiveUI(found.type, elems);
             }
             renderEditor();
@@ -814,7 +858,10 @@ function onGridSingleClick(event) {
     // --- FIN LOGICA INTERACTIVA ---
 
     // Calculate cell size dynamically
-    const cellSize = editorCanvas.width / Math.max(currentGridSize.rows, currentGridSize.cols);
+    const cellSize = Math.min(
+        editorCanvas.width / currentGridSize.cols,
+        editorCanvas.height / currentGridSize.rows
+    );
 
     const c = Math.floor(x_canvas / cellSize);
     const r = Math.floor(y_canvas / cellSize);
@@ -827,9 +874,7 @@ function onGridSingleClick(event) {
                     ...selectedTrackPart,
                     rotation_deg: 0 // Initial rotation
                 };
-                // Unselect the part after placing it
-                document.querySelectorAll('#trackPartsPalette img').forEach(p => p.classList.remove('selected'));
-                selectedTrackPart = null;
+                // Do NOT unselect the part after placing it so user can place multiple
                 renderEditor();
             }
         }
@@ -839,38 +884,9 @@ function onGridSingleClick(event) {
 function onGridDoubleClick(event) {
     if (!editorCanvas) return;
 
-    const rect = editorCanvas.getBoundingClientRect();
-
-    // Repetir la lógica de mapeo exacto para el doble clic
-    const renderWidth = rect.width;
-    const renderHeight = rect.height;
-    const canvasAspect = editorCanvas.width / editorCanvas.height;
-    const containerAspect = renderWidth / renderHeight;
-
-    let actualWidth, actualHeight, offsetX, offsetY;
-
-    if (containerAspect > canvasAspect) {
-        actualHeight = renderHeight;
-        actualWidth = renderHeight * canvasAspect;
-        offsetX = (renderWidth - actualWidth) / 2;
-        offsetY = 0;
-    } else {
-        actualWidth = renderWidth;
-        actualHeight = renderWidth / canvasAspect;
-        offsetX = 0;
-        offsetY = (renderHeight - actualHeight) / 2;
-    }
-
-    const x_relative = event.clientX - rect.left - offsetX;
-    const y_relative = event.clientY - rect.top - offsetY;
-
-    const scale = editorCanvas.width / actualWidth;
-    const x_canvas = x_relative * scale;
-    const y_canvas = y_relative * scale;
-
-    const exportScale = (currentGridSize.cols * TRACK_PART_SIZE_PX) / editorCanvas.width;
-    const p_x = x_canvas * exportScale;
-    const p_y = y_canvas * exportScale;
+    const coords = getCanvasCoords(event);
+    if (!coords) return;
+    const { x_canvas, y_canvas, p_x, p_y } = coords;
 
     // Double click logic for interactive elements
     let clickedElementIndex = -1;
@@ -897,7 +913,10 @@ function onGridDoubleClick(event) {
     }
 
     // Default double click rotation for tracks
-    const cellSize = editorCanvas.width / Math.max(currentGridSize.rows, currentGridSize.cols);
+    const cellSize = Math.min(
+        editorCanvas.width / currentGridSize.cols,
+        editorCanvas.height / currentGridSize.rows
+    );
 
     const c = Math.floor(x_canvas / cellSize);
     const r = Math.floor(y_canvas / cellSize);
@@ -1193,6 +1212,7 @@ function saveTrackDesign() {
             height: el.height,
             value: el.value,
             color: el.color,
+            shape: el.shape || 'rect',
             rotation: el.rotation || 0
         })),
         trackName: trackName
@@ -1209,7 +1229,7 @@ function saveTrackDesign() {
             }
         }
     }
-    if (designData.gridParts.length === 0) {
+    if (designData.gridParts.length === 0 && designData.interactiveElements.length === 0) {
         alert("La pista está vacía. Nada que guardar.");
         return;
     }
@@ -1331,24 +1351,34 @@ function drawInteractiveElements(targetCtx, scaleRatio) {
             targetCtx.lineTo(-w/2, h/2);
             targetCtx.stroke();
         } else if (el.type === 'obstacle') {
-            targetCtx.fillStyle = '#444';
-            targetCtx.fillRect(-w/2, -h/2, w, h);
-            targetCtx.strokeStyle = 'yellow';
-            targetCtx.lineWidth = 3 * scaleRatio;
-            targetCtx.strokeRect(-w/2, -h/2, w, h);
-            targetCtx.strokeStyle = 'yellow';
-            targetCtx.lineWidth = 2 * scaleRatio;
+            targetCtx.fillStyle = el.color || '#444';
+            
             targetCtx.beginPath();
-            for (let i = -Math.max(w,h); i < Math.max(w,h) * 2; i += 15 * scaleRatio) {
-                targetCtx.moveTo(i, -h/2);
-                targetCtx.lineTo(i - h, h/2);
+            
+            const shape = el.shape || 'rect';
+            if (shape === 'rect') {
+                targetCtx.rect(-w/2, -h/2, w, h);
+            } else if (shape === 'circle') {
+                targetCtx.ellipse(0, 0, w/2, h/2, 0, 0, Math.PI * 2);
+            } else if (shape === 'triangle') {
+                targetCtx.moveTo(0, -h/2);
+                targetCtx.lineTo(w/2, h/2);
+                targetCtx.lineTo(-w/2, h/2);
+                targetCtx.closePath();
+            } else if (shape === 'outer_curve') {
+                targetCtx.moveTo(-w/2, h/2);
+                targetCtx.ellipse(-w/2, h/2, w, h, 0, 0, -Math.PI/2, true);
+                targetCtx.lineTo(-w/2, h/2);
+                targetCtx.closePath();
+            } else if (shape === 'inner_curve') {
+                targetCtx.moveTo(-w/2, -h/2);
+                targetCtx.lineTo(w/2, -h/2);
+                targetCtx.lineTo(w/2, h/2);
+                targetCtx.ellipse(-w/2, h/2, w, h, 0, 0, -Math.PI/2, true);
+                targetCtx.closePath();
             }
-            targetCtx.save();
-            targetCtx.beginPath();
-            targetCtx.rect(-w/2, -h/2, w, h);
-            targetCtx.clip();
-            targetCtx.stroke();
-            targetCtx.restore();
+            
+            targetCtx.fill();
         }
 
         if (selectedInteractiveElement && selectedInteractiveElement.id === el.id) {
@@ -1359,20 +1389,34 @@ function drawInteractiveElements(targetCtx, scaleRatio) {
             targetCtx.setLineDash([]);
             
             if (currentToolMode === 'move') {
+                const rad = TRANSFORM_HANDLE_RADIUS * scaleRatio;
                 targetCtx.fillStyle = 'cyan';
-                const hs = 8 * scaleRatio;
-                targetCtx.fillRect(-w/2 - hs/2, -h/2 - hs/2, hs, hs); // TL
-                targetCtx.fillRect(w/2 - hs/2, -h/2 - hs/2, hs, hs);  // TR
-                targetCtx.fillRect(-w/2 - hs/2, h/2 - hs/2, hs, hs);  // BL
-                targetCtx.fillRect(w/2 - hs/2, h/2 - hs/2, hs, hs);   // BR
+                targetCtx.strokeStyle = 'blue';
+                targetCtx.lineWidth = 1 * scaleRatio;
+
+                const drawHandle = (hx, hy) => {
+                    targetCtx.beginPath();
+                    targetCtx.arc(hx, hy, rad, 0, Math.PI * 2);
+                    targetCtx.fill();
+                    targetCtx.stroke();
+                };
+
+                drawHandle(-w/2, -h/2); // TL
+                drawHandle(0, -h/2);    // T
+                drawHandle(w/2, -h/2);  // TR
+                drawHandle(-w/2, 0);    // L
+                drawHandle(w/2, 0);     // R
+                drawHandle(-w/2, h/2);  // BL
+                drawHandle(0, h/2);     // B
+                drawHandle(w/2, h/2);   // BR
                 
                 targetCtx.beginPath();
                 targetCtx.moveTo(0, -h/2);
-                targetCtx.lineTo(0, -h/2 - 20 * scaleRatio);
+                targetCtx.lineTo(0, -h/2 - (TRANSFORM_ROTATE_HANDLE_OFFSET - 3) * scaleRatio);
                 targetCtx.stroke();
                 
                 targetCtx.beginPath();
-                targetCtx.arc(0, -h/2 - 25 * scaleRatio, 5 * scaleRatio, 0, Math.PI * 2);
+                targetCtx.arc(0, -h/2 - TRANSFORM_ROTATE_HANDLE_OFFSET * scaleRatio, TRANSFORM_ROTATE_HANDLE_RADIUS * scaleRatio, 0, Math.PI * 2);
                 targetCtx.fill();
             }
         }
@@ -1463,13 +1507,18 @@ function saveEditorState() {
 
     savedState = {
         grid: gridCopy,
-        currentGridSize: { ...currentGridSize }
+        currentGridSize: { ...currentGridSize },
+        interactiveElements: interactiveElements.map(el => ({...el})) // Ensure we don't lose them on tab switching
     };
 }
 
 function restoreEditorState() {
     if (savedState) {
         currentGridSize = { ...savedState.currentGridSize };
+        
+        if (savedState.interactiveElements) {
+            interactiveElements = hydrateInteractiveElements(savedState.interactiveElements);
+        }
 
         // Restore grid with proper image references
         grid = savedState.grid.map(row =>
@@ -1576,6 +1625,7 @@ function setupInteractiveTools(elems) {
     if(elems.intSettLength) elems.intSettLength.addEventListener('input', updateSelectedInteractiveElement);
     if(elems.intSettValue) elems.intSettValue.addEventListener('input', updateSelectedInteractiveElement);
     if(elems.intSettColor) elems.intSettColor.addEventListener('input', updateSelectedInteractiveElement);
+    if(elems.obstacleShape) elems.obstacleShape.addEventListener('change', updateSelectedInteractiveElement);
 }
 
 function updateInteractiveUI(mode, elems) {
@@ -1585,20 +1635,25 @@ function updateInteractiveUI(mode, elems) {
     if (mode === 'rfid') {
         elems.lblIntVal.style.display = 'flex';
         elems.lblIntColor.style.display = 'none';
+        if (elems.lblIntShape) elems.lblIntShape.style.display = 'none';
         elems.intSettValue.placeholder = 'UID...';
     } else if (mode === 'color') {
         elems.lblIntVal.style.display = 'none';
         elems.lblIntColor.style.display = 'flex';
+        if (elems.lblIntShape) elems.lblIntShape.style.display = 'none';
     } else if (mode === 'hopper') {
         elems.lblIntVal.style.display = 'flex';
         elems.lblIntColor.style.display = 'flex';
+        if (elems.lblIntShape) elems.lblIntShape.style.display = 'none';
         elems.intSettValue.placeholder = 'Texto...';
     } else if (mode === 'obstacle') {
         elems.lblIntVal.style.display = 'none';
-        elems.lblIntColor.style.display = 'none';
+        elems.lblIntColor.style.display = 'flex';
+        if (elems.lblIntShape) elems.lblIntShape.style.display = 'flex';
     } else {
         elems.lblIntVal.style.display = 'none';
         elems.lblIntColor.style.display = 'none';
+        if (elems.lblIntShape) elems.lblIntShape.style.display = 'none';
     }
 }
 
@@ -1612,6 +1667,7 @@ function updateSelectedInteractiveElement() {
         selectedInteractiveElement.height = parseFloat(elems.intSettLength.value) || 50;
         selectedInteractiveElement.value = elems.intSettValue.value || '';
         selectedInteractiveElement.color = elems.intSettColor.value || '#0000ff';
+        selectedInteractiveElement.shape = elems.obstacleShape.value || 'rect';
         renderEditor();
     }
 }
@@ -1642,16 +1698,27 @@ function setupTrackZoomPan() {
 
     if (editorCanvas) {
         editorCanvas.addEventListener('wheel', (event) => {
-            if (!event.ctrlKey) return; 
+            const rect = editorCanvas.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return;
+            const scaleX = editorCanvas.width / rect.width;
+            const scaleY = editorCanvas.height / rect.height;
+
+            if (!event.ctrlKey) {
+                // Inverse pan mapping for non-ctrl wheel events
+                trackPanX -= event.deltaX * scaleX;
+                trackPanY -= event.deltaY * scaleY;
+                renderEditor();
+                event.preventDefault();
+                return;
+            }
             event.preventDefault();
             const zoomStep = Math.max(0.05, trackZoom * 0.1);
             const previousZoom = trackZoom;
             if (event.deltaY < 0) trackZoom = Math.min(5.0, trackZoom + zoomStep);
             else trackZoom = Math.max(0.1, trackZoom - zoomStep);
 
-            const rect = editorCanvas.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left;
-            const mouseY = event.clientY - rect.top;
+            const mouseX = (event.clientX - rect.left) * scaleX;
+            const mouseY = (event.clientY - rect.top) * scaleY;
 
             trackPanX = mouseX - (mouseX - trackPanX) * (trackZoom / previousZoom);
             trackPanY = mouseY - (mouseY - trackPanY) * (trackZoom / previousZoom);
@@ -1670,8 +1737,11 @@ function setupTrackZoomPan() {
 
         window.addEventListener('mousemove', (event) => {
             if (isPanningTrack && editorCanvas && event.buttons !== 0) {
-                trackPanX += event.clientX - trackPanStartX;
-                trackPanY += event.clientY - trackPanStartY;
+                const rect = editorCanvas.getBoundingClientRect();
+                const scaleX = rect.width > 0 ? (editorCanvas.width / rect.width) : 1;
+                const scaleY = rect.height > 0 ? (editorCanvas.height / rect.height) : 1;
+                trackPanX += (event.clientX - trackPanStartX) * scaleX;
+                trackPanY += (event.clientY - trackPanStartY) * scaleY;
                 trackPanStartX = event.clientX;
                 trackPanStartY = event.clientY;
                 renderEditor();
@@ -1692,16 +1762,21 @@ function setupTrackZoomPan() {
 
 function zoomToExtents() {
     if(!editorCanvas) return;
-    const padding = 40;
-    const cellSize = editorCanvas.width / Math.max(currentGridSize.rows, currentGridSize.cols);
+    const padding = 20;
+    
+    // Calculamos el tamaño de celda que mejor cabe
+    const cellSize = Math.min(
+        editorCanvas.width / currentGridSize.cols,
+        editorCanvas.height / currentGridSize.rows
+    );
+    
     const contentW = currentGridSize.cols * cellSize;
     const contentH = currentGridSize.rows * cellSize;
 
     if (contentW === 0 || contentH === 0) { trackZoom = 1; trackPanX = 0; trackPanY = 0; renderEditor(); return; }
 
-    const scaleX = (editorCanvas.width - padding*2) / contentW;
-    const scaleY = (editorCanvas.height - padding*2) / contentH;
-    trackZoom = Math.min(Math.min(scaleX, scaleY), 5.0);
+    trackZoom = 0.95; // Un pequeño margen visual
+
     trackPanX = (editorCanvas.width - contentW * trackZoom) / 2;
     trackPanY = (editorCanvas.height - contentH * trackZoom) / 2;
     renderEditor();

@@ -44,6 +44,137 @@ export class Simulation {
         this.cameraY = 0;
         this.cameraZoom = 1;
         this.cameraFollowRobot = false;
+
+        this._shapeHitCanvas = null;
+        this._shapeHitCtx = null;
+    }
+
+    _getShapeHitCtx() {
+        if (this._shapeHitCtx) return this._shapeHitCtx;
+        try {
+            if (typeof OffscreenCanvas !== 'undefined') {
+                const c = new OffscreenCanvas(4, 4);
+                this._shapeHitCanvas = c;
+                this._shapeHitCtx = c.getContext('2d');
+                return this._shapeHitCtx;
+            }
+        } catch (e) {
+            // Fallback below.
+        }
+
+        const c = document.createElement('canvas');
+        c.width = 4;
+        c.height = 4;
+        this._shapeHitCanvas = c;
+        this._shapeHitCtx = c.getContext('2d');
+        return this._shapeHitCtx;
+    }
+
+    _buildObstaclePath(shape, halfW, halfH) {
+        const path = new Path2D();
+        if (shape === 'circle') {
+            path.ellipse(0, 0, halfW, halfH, 0, 0, Math.PI * 2);
+            return path;
+        }
+        if (shape === 'triangle') {
+            path.moveTo(0, -halfH);
+            path.lineTo(halfW, halfH);
+            path.lineTo(-halfW, halfH);
+            path.closePath();
+            return path;
+        }
+        if (shape === 'outer_curve') {
+            path.moveTo(-halfW, halfH);
+            path.ellipse(-halfW, halfH, halfW * 2, halfH * 2, 0, 0, -Math.PI / 2, true);
+            path.lineTo(-halfW, halfH);
+            path.closePath();
+            return path;
+        }
+        if (shape === 'inner_curve') {
+            path.moveTo(-halfW, -halfH);
+            path.lineTo(halfW, -halfH);
+            path.lineTo(halfW, halfH);
+            path.ellipse(-halfW, halfH, halfW * 2, halfH * 2, 0, 0, -Math.PI / 2, true);
+            path.closePath();
+            return path;
+        }
+
+        // Default rectangle.
+        path.rect(-halfW, -halfH, halfW * 2, halfH * 2);
+        return path;
+    }
+
+    // Reusable point-vs-shape hit-test in world coordinates.
+    // Useful for keeping all collision/sensor checks consistent with editor shapes.
+    _isPointInsideElement(px, py, el, padding = 0) {
+        if (!el) return false;
+
+        const width = Math.max(0, Number(el.width) || 0);
+        const height = Math.max(0, Number(el.height) || 0);
+        if (width === 0 || height === 0) return false;
+
+        const cx = (Number(el.x) || 0) + width / 2;
+        const cy = (Number(el.y) || 0) + height / 2;
+        const rot_rad = (Number(el.rotation) || 0) * Math.PI / 180;
+        const cosR = Math.cos(-rot_rad);
+        const sinR = Math.sin(-rot_rad);
+
+        const dx = px - cx;
+        const dy = py - cy;
+        const localX = dx * cosR - dy * sinR;
+        const localY = dx * sinR + dy * cosR;
+
+        const halfW = width / 2 + Math.max(0, padding);
+        const halfH = height / 2 + Math.max(0, padding);
+
+        const shape = String(el.shape || 'rect').toLowerCase();
+        const elementType = String(el.type || '').toLowerCase();
+
+        // Non-obstacle interactives are treated as rects for now.
+        if (elementType !== 'obstacle' || shape === 'rect') {
+            return Math.abs(localX) <= halfW && Math.abs(localY) <= halfH;
+        }
+
+        if (shape === 'circle') {
+            if (halfW <= 0 || halfH <= 0) return false;
+            const nx = localX / halfW;
+            const ny = localY / halfH;
+            return nx * nx + ny * ny <= 1;
+        }
+
+        const ctx = this._getShapeHitCtx();
+        if (!ctx) {
+            return Math.abs(localX) <= halfW && Math.abs(localY) <= halfH;
+        }
+
+        const path = this._buildObstaclePath(shape, halfW, halfH);
+        return ctx.isPointInPath(path, localX, localY);
+    }
+
+    _raycastShapeLocal(startX_px, startY_px, angle_rad, maxDistance_px, cx, cy, rot_rad, halfW, halfH, shape) {
+        const dirX = Math.cos(angle_rad);
+        const dirY = Math.sin(angle_rad);
+        const rayEl = {
+            type: 'obstacle',
+            shape,
+            x: cx - halfW,
+            y: cy - halfH,
+            width: halfW * 2,
+            height: halfH * 2,
+            rotation: rot_rad * 180 / Math.PI
+        };
+
+        // 1 px step gives reliable hit for small/curved features.
+        const step = 1;
+        for (let d = 1; d <= maxDistance_px; d += step) {
+            const wx = startX_px + dirX * d;
+            const wy = startY_px + dirY * d;
+            if (this._isPointInsideElement(wx, wy, rayEl, 0)) {
+                return d * d;
+            }
+        }
+
+        return null;
     }
 
     centerCameraOnTrack(canvasWidth, canvasHeight) {
@@ -394,13 +525,32 @@ export class Simulation {
         if (liveElements && liveElements.length > 0) {
             for (const el of liveElements) {
                 if (el.type === 'obstacle' || el.type === 'hopper') {
-                    // Check intersection between ray segment and OBB
-                    // The OBB center is at el.x + el.width/2, el.y + el.height/2
                     const cx = el.x + el.width / 2;
                     const cy = el.y + el.height / 2;
                     const halfW = el.width / 2;
                     const halfH = el.height / 2;
                     const rot_rad = (el.rotation || 0) * Math.PI / 180;
+                    const shape = (el.shape || 'rect').toLowerCase();
+
+                    // For non-rect obstacle shapes, raycast against the actual shape.
+                    if (el.type === 'obstacle' && shape !== 'rect') {
+                        const hitDistSq = this._raycastShapeLocal(
+                            startX_px,
+                            startY_px,
+                            angle_rad,
+                            maxDistance_px,
+                            cx,
+                            cy,
+                            rot_rad,
+                            halfW,
+                            halfH,
+                            shape
+                        );
+                        if (hitDistSq !== null && hitDistSq < minDistanceSq && hitDistSq > 0) {
+                            minDistanceSq = hitDistSq;
+                        }
+                        continue;
+                    }
 
                     // Convert ray start and end points directly into OBB local space
                     const dx0 = startX_px - cx;
@@ -517,23 +667,7 @@ export class Simulation {
 
         const isSensorOverRFIDTag = (sensorX_px, sensorY_px, sensorRadius_px) => {
             for (const tag of interactiveRFID) {
-                const x = Number(tag.x) || 0;
-                const y = Number(tag.y) || 0;
-                const w = Number(tag.width) || 0;
-                const h = Number(tag.height) || 0;
-                const rotDeg = Number(tag.rotation) || 0;
-
-                const cx = x + w / 2;
-                const cy = y + h / 2;
-
-                const dx = sensorX_px - cx;
-                const dy = sensorY_px - cy;
-                const theta = -rotDeg * Math.PI / 180;
-
-                const localX = dx * Math.cos(theta) - dy * Math.sin(theta);
-                const localY = dx * Math.sin(theta) + dy * Math.cos(theta);
-
-                if (Math.abs(localX) <= w / 2 + sensorRadius_px && Math.abs(localY) <= h / 2 + sensorRadius_px) {
+                if (this._isPointInsideElement(sensorX_px, sensorY_px, tag, sensorRadius_px)) {
                     return tag;
                 }
             }

@@ -127,7 +127,9 @@ export function getDOMElements() {
         lblIntVal: document.getElementById('lblIntVal'),
         intSettValue: document.getElementById('intSettValue'),
         lblIntColor: document.getElementById('lblIntColor'),
-        intSettColor: document.getElementById('intSettColor')
+        intSettColor: document.getElementById('intSettColor'),
+        lblIntShape: document.getElementById('lblIntShape'),
+        obstacleShape: document.getElementById('obstacleShape')
     };
 }
 
