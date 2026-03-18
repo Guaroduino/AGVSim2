@@ -269,7 +269,8 @@ export function initTrackEditor(appInterface) {
     }
 
     // Setup event listeners
-    setupInteractiveTools(elems);\n    setupTrackZoomPan();
+    setupInteractiveTools(elems);
+    setupTrackZoomPan();
     elems.trackGridSizeSelect.addEventListener('change', (e) => {
         const size = e.target.value.split('x');
         currentGridSize = { rows: parseInt(size[0]), cols: parseInt(size[1]) };
