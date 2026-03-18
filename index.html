@@ -1588,6 +1588,10 @@ void loop() {
                             <select id="trackGridSize" style="padding: 0.2em; font-size: 0.8em; width: auto;">
                                 <option value="3x6" selected>3x6</option>
                                 <option value="4x8">4x8</option>
+                                <option value="5x10">5x10</option>
+                                <option value="6x12">6x12</option>
+                                <option value="8x16">8x16</option>
+                                <option value="10x20">10x20</option>
                             </select>
                             
                         </div>
@@ -1636,8 +1640,11 @@ void loop() {
                             <button id="toolModeObstacle" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Obstáculo</button>
                         </div>
                         <div style="display: flex; gap: 0.3em; flex-wrap: wrap;">
-                            <button id="toolModeMoveInt" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Mover</button>
+                            <button id="toolModeMoveInt" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Transformación</button>
                             <button id="toolModeEraseInt" class="danger" style="flex:1; padding: 0.3em; font-size: 0.8em; border-radius: 4px;">Borrar</button>
+                        </div>
+                        <div style="display: flex; margin-top: 0.3em;">
+                            <button id="btnAddBorder" style="flex:1; padding: 0.4em; font-size: 0.8em; border-radius: 4px; background-color: var(--primary-color); color: white; border: none; cursor:pointer;">Agregar Borde Exterior</button>
                         </div>
                         <div id="interactiveSettings" style="margin-top: 0.5em; padding-top: 0.5em; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.5em; font-size: 0.8em;">
                             <div style="display: flex; gap: 0.5em; align-items: center;">
@@ -1654,9 +1661,18 @@ void loop() {
 
                 <!-- Controles Grid (Canvas) Full Rest Height -->
                 <div class="track-editor-grid"
-                    style="flex: 1; min-height: 0; background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                    style="position: relative; flex: 1; min-height: 0; background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                    
+                    <div style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.9); padding: 5px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; gap: 5px; z-index: 10;">
+                        <button id="trackPanBtn" title="Activar/Desactivar Paneo" style="padding: 0.3em; cursor: pointer;">✋</button>
+                        <button id="trackZoomInBtn" title="Acercar" style="padding: 0.3em; width: 30px;">+</button>
+                        <button id="trackZoomOutBtn" title="Alejar" style="padding: 0.3em; width: 30px;">−</button>
+                        <button id="trackZoomResetBtn" title="Resetear Zoom (1:1)" style="padding: 0.3em;">1:1</button>
+                        <button id="trackZoomExtentsBtn" title="Ajustar Vista" style="padding: 0.3em;">🔍</button>
+                    </div>
+
                     <canvas id="trackEditorCanvas"
-                        style="max-width: 100%; max-height: 100%; object-fit: contain; display: block;"></canvas>
+                        style="max-width: 100%; max-height: 100%; object-fit: contain; display: block; transform-origin: center center;"></canvas>
                     <!-- Size set by JS -->
                 </div>
             </div>

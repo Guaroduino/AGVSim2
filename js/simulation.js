@@ -380,6 +380,108 @@ export class Simulation {
         };
     }
 
+    // Internal helper for ToF raycasting against obstacles
+    _raycastObstacles(startX_px, startY_px, angle_rad, maxDistance_px) {
+        let minDistanceSq = maxDistance_px * maxDistance_px;
+        let p_endX = startX_px + Math.cos(angle_rad) * maxDistance_px;
+        let p_endY = startY_px + Math.sin(angle_rad) * maxDistance_px;
+
+        // Array combinado o vivo de los obstáculos sin necesidad de presionar exportar
+        const liveElements = (window.trackEditorInstance && typeof window.trackEditorInstance.getInteractiveElements === 'function') 
+            ? window.trackEditorInstance.getInteractiveElements() 
+            : (this.track && this.track.interactiveElements ? this.track.interactiveElements : []);
+
+        if (liveElements && liveElements.length > 0) {
+            for (const el of liveElements) {
+                if (el.type === 'obstacle' || el.type === 'hopper') {
+                    // Check intersection between ray segment and OBB
+                    // The OBB center is at el.x + el.width/2, el.y + el.height/2
+                    const cx = el.x + el.width / 2;
+                    const cy = el.y + el.height / 2;
+                    const halfW = el.width / 2;
+                    const halfH = el.height / 2;
+                    const rot_rad = (el.rotation || 0) * Math.PI / 180;
+
+                    // Convert ray start and end points directly into OBB local space
+                    const dx0 = startX_px - cx;
+                    const dy0 = startY_px - cy;
+                    const localX0 = dx0 * Math.cos(-rot_rad) - dy0 * Math.sin(-rot_rad);
+                    const localY0 = dx0 * Math.sin(-rot_rad) + dy0 * Math.cos(-rot_rad);
+
+                    const dx1 = p_endX - cx;
+                    const dy1 = p_endY - cy;
+                    const localX1 = dx1 * Math.cos(-rot_rad) - dy1 * Math.sin(-rot_rad);
+                    const localY1 = dx1 * Math.sin(-rot_rad) + dy1 * Math.cos(-rot_rad);
+
+                    // Liang-Barsky line clipping against AABB (-halfW, -halfH) to (halfW, halfH)
+                    let t0 = 0.0, t1 = 1.0;
+                    const p = [-(localX1 - localX0), localX1 - localX0, -(localY1 - localY0), localY1 - localY0];
+                    const q = [localX0 + halfW, halfW - localX0, localY0 + halfH, halfH - localY0];
+
+                    let hit = true;
+                    for (let i = 0; i < 4; i++) {
+                        if (p[i] === 0) {
+                            if (q[i] < 0) hit = false;
+                        } else {
+                            const t = q[i] / p[i];
+                            if (p[i] < 0) {
+                                if (t > t1) hit = false;
+                                else if (t > t0) t0 = t;
+                            } else {
+                                if (t < t0) hit = false;
+                                else if (t < t1) t1 = t;
+                            }
+                        }
+                    }
+
+                    if (hit && t0 <= t1 && t0 >= 0 && t0 <= 1) {
+                        // The intersection point t0 is valid
+                        const hitX = startX_px + t0 * (p_endX - startX_px);
+                        const hitY = startY_px + t0 * (p_endY - startY_px);
+                        const distSq = (hitX - startX_px)**2 + (hitY - startY_px)**2;
+                        if (distSq < minDistanceSq && distSq > 0) {
+                            minDistanceSq = distSq;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also raycast against track boundaries (walls)
+        if (this.track && this.track.width_px > 0 && this.track.height_px > 0) {
+            let hit = true;
+            let t0 = 0.0, t1 = 1.0;
+            const p = [-(p_endX - startX_px), p_endX - startX_px, -(p_endY - startY_px), p_endY - startY_px];
+            const q = [startX_px - 0, this.track.width_px - startX_px, startY_px - 0, this.track.height_px - startY_px];
+
+            for (let i = 0; i < 4; i++) {
+                if (p[i] === 0) {
+                    if (q[i] < 0) hit = false;
+                } else {
+                    const t = q[i] / p[i];
+                    if (p[i] < 0) {
+                        if (t > t1) hit = false;
+                        else if (t > t0) t0 = t;
+                    } else {
+                        if (t < t0) hit = false;
+                        else if (t < t1) t1 = t;
+                    }
+                }
+            }
+
+            if (hit && t0 <= t1 && t0 >= 0 && t0 <= 1) {
+                const hitX = startX_px + t0 * (p_endX - startX_px);
+                const hitY = startY_px + t0 * (p_endY - startY_px);
+                const distSq = (hitX - startX_px)**2 + (hitY - startY_px)**2;
+                if (distSq < minDistanceSq && distSq > 0) {
+                    minDistanceSq = distSq;
+                }
+            }
+        }
+
+        return Math.sqrt(minDistanceSq);
+    }
+
     _updateRobotSensors() {
         if (!this.track.imageData) {
             // All off line if no track
@@ -440,6 +542,8 @@ export class Simulation {
         // Calculate sensor radius in pixels using robot's parameter
         const defaultSensorRadiusPx = Math.max(1, (this.robot.sensorDiameter_m / 2) * PIXELS_PER_METER);
 
+        delete this.robot.sensors.tofMm; // Reset for recalculation
+
         // For each sensor, compute state
         for (const key in sensorPositions_m) {
             const pos = sensorPositions_m[key];
@@ -463,6 +567,28 @@ export class Simulation {
                     if (cSens.type === 'tof' || cSens.type === 'rgb' || cSens.type === 'rfid' || cSens.type === 'led' || cSens.type === 'screen') {
                         if (cSens.type === 'led' || cSens.type === 'screen') {
                             isOutputSensor = true;
+                        }
+                        if (cSens.type === 'tof') {
+                            const customMaxDist_mm = cSens.maxDistance || 500;
+                            const maxDist_px = (customMaxDist_mm / 1000) * PIXELS_PER_METER;
+                            
+                            let absoluteAngle_rad = this.robot.angle_rad + (cSens.angle || 0) * Math.PI / 180;
+                            if (key.endsWith('_sym')) {
+                                absoluteAngle_rad = this.robot.angle_rad + (180 - (cSens.angle || 0)) * Math.PI / 180;
+                            }
+                            
+                            const measuredDist_px = this._raycastObstacles(px, py, absoluteAngle_rad, maxDist_px);
+                            const measuredDist_mm = (measuredDist_px / PIXELS_PER_METER) * 1000;
+                            
+                            // Store generic distance
+                            this.robot.sensors[key + '_distance_mm'] = measuredDist_mm;
+                            
+                            // Update shared tofMm (for codeEditor backward compatibility, keeps smallest if multiple exist)
+                            if (typeof this.robot.sensors.tofMm !== 'number') {
+                                this.robot.sensors.tofMm = measuredDist_mm;
+                            } else {
+                                this.robot.sensors.tofMm = Math.min(this.robot.sensors.tofMm, measuredDist_mm);
+                            }
                         }
                         if (cSens.type === 'rfid') {
                             const foundTag = isSensorOverRFIDTag(px, py, physicsRadiusPx);
@@ -521,8 +647,12 @@ export class Simulation {
             // Pass all sensor states for display
             const displaySensorStates = {};
             for (const key in this.robot.sensors) {
-                // Pass true if on line (1), false if off line (0)
-                displaySensorStates[key] = this.robot.sensors[key] === 1;
+                if (key.endsWith('_distance_mm')) {
+                    displaySensorStates[key] = this.robot.sensors[key];
+                } else {
+                    // Pass true if on line (1), false if off line (0)
+                    displaySensorStates[key] = this.robot.sensors[key] === 1;
+                }
             }
             this.robot.draw(displayCtx, displaySensorStates);
         }

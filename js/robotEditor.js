@@ -641,9 +641,13 @@ export function initRobotEditor(appInterface) {
                 let extraHTML = '';
                 if (sensor.type === 'tof') {
                     let dispAngle = sensor.angle || 0;
-                    if (isClone) dispAngle = -dispAngle;
+                    if (isClone) {
+                        dispAngle = 180 - dispAngle;
+                        if (dispAngle > 180) dispAngle -= 360;
+                    }
                     extraHTML = `<input type="number" step="1" id="customSensorAngle_${idx}${isClone ? '_sym' : ''}" value="${dispAngle}" placeholder="Ángulo (°)" style="width: 70px; font-size: 0.8em;" title="Ángulo" ${isClone ? 'disabled' : ''}>
-                                 <input type="number" step="1" id="customSensorMaxDist_${idx}${isClone ? '_sym' : ''}" value="${sensor.maxDistance || 500}" placeholder="Máx (mm)" style="width: 70px; font-size: 0.8em;" title="Distancia Máxima (mm)" ${isClone ? 'disabled' : ''}>`;
+                                 <input type="number" step="1" id="customSensorMaxDist_${idx}${isClone ? '_sym' : ''}" value="${sensor.maxDistance || 500}" placeholder="Máx (mm)" style="width: 70px; font-size: 0.8em;" title="Distancia Máxima (mm)" ${isClone ? 'disabled' : ''}>
+                                 <input type="text" id="customSensorI2C_${idx}${isClone ? '_sym' : ''}" value="${isClone ? (sensor.i2cAddressSym || '0x2A') : (sensor.i2cAddress || '0x29')}" placeholder="I2C" style="width: 50px; font-size: 0.8em;" title="Dirección I2C">`;
                 } else if (sensor.type === 'rgb' || sensor.type === 'rfid' || sensor.type === 'led') {
                     extraHTML = `<input type="number" step="1" id="customSensorDiam_${idx}${isClone ? '_sym' : ''}" value="${sensor.detectionDiameter || 50}" placeholder="Diám. (mm)" style="width: 70px; font-size: 0.8em;" title="Diámetro" ${isClone ? 'disabled' : ''}>`;
                     if (sensor.type === 'led') {
@@ -697,10 +701,12 @@ export function initRobotEditor(appInterface) {
             let inDiam = null;
             let inCol = null;
             let inMaxDist = null;
+            let inI2C = null;
               let inNumPins = null;
               if (sensor.type === 'tof') {
                   inAngle = mainItem.querySelector(`#customSensorAngle_${idx}`);
                   inMaxDist = mainItem.querySelector(`#customSensorMaxDist_${idx}`);
+                  inI2C = mainItem.querySelector(`#customSensorI2C_${idx}`);
               }
               if (sensor.type === 'rgb' || sensor.type === 'rfid' || sensor.type === 'led') inDiam = mainItem.querySelector(`#customSensorDiam_${idx}`);
               if (sensor.type === 'led') inCol = mainItem.querySelector(`#customSensorColor_${idx}`);
@@ -716,6 +722,7 @@ export function initRobotEditor(appInterface) {
                   currentGeometry.customSensors[idx].y_mm = parseFloat(inY.value) || 0;
                   if (inAngle) currentGeometry.customSensors[idx].angle = parseFloat(inAngle.value) || 0;
                   if (inMaxDist) currentGeometry.customSensors[idx].maxDistance = parseFloat(inMaxDist.value) || 500;
+                  if (inI2C) currentGeometry.customSensors[idx].i2cAddress = inI2C.value || '0x29';
                   if (inDiam) currentGeometry.customSensors[idx].detectionDiameter = parseFloat(inDiam.value) || 0;
                   if (inCol) currentGeometry.customSensors[idx].color = inCol.value;
                   if (inNumPins) currentGeometry.customSensors[idx].numPins = parseInt(inNumPins.value) || 1;
@@ -726,7 +733,11 @@ export function initRobotEditor(appInterface) {
                          if (cY) cY.value = currentGeometry.customSensors[idx].y_mm;
                          if (inAngle) {
                              const cA = cloneItem.querySelector(`#customSensorAngle_${idx}_sym`);
-                             if (cA) cA.value = -(currentGeometry.customSensors[idx].angle || 0);
+                             if (cA) {
+                                  let a = 180 - (currentGeometry.customSensors[idx].angle || 0);
+                                  if (a > 180) a -= 360;
+                                  cA.value = a;
+                             }
                          }
                          if (inMaxDist) {
                              const cM = cloneItem.querySelector(`#customSensorMaxDist_${idx}_sym`);
@@ -752,8 +763,18 @@ export function initRobotEditor(appInterface) {
             }
             if (inAngle) inAngle.addEventListener('input', updateVal);
             if (inMaxDist) inMaxDist.addEventListener('input', updateVal);
+            if (inI2C) inI2C.addEventListener('input', updateVal);
             if (inDiam) inDiam.addEventListener('input', updateVal);
             if (inCol) inCol.addEventListener('input', updateVal);
+            if (cloneItem && sensor.type === 'tof') {
+                const cI = cloneItem.querySelector(`#customSensorI2C_${idx}_sym`);
+                if (cI) {
+                    cI.addEventListener('input', () => {
+                        currentGeometry.customSensors[idx].i2cAddressSym = cI.value;
+                        window.forceGeometrySync();
+                    });
+                }
+            }
         });
 
         // Bind delete buttons
@@ -838,7 +859,25 @@ export function initRobotEditor(appInterface) {
     if (elems.addDistanceSensorBtn) {
         elems.addDistanceSensorBtn.addEventListener('click', () => {
             if (!currentGeometry.customSensors) currentGeometry.customSensors = [];
-            currentGeometry.customSensors.push({ type: 'tof', x_mm: 50, y_mm: 0, angle: 0, maxDistance: 500 }); // Default pos
+            
+            // Encuentra una dirección I2C disponible base partiendo de 0x24 y el de simétrico en 0x25, etc.
+            let i2cBase = 41; // 0x29 en decimal
+            let iter = 0;
+            let currentI2C = '0x29';
+            let currentI2CSym = '0x2A';
+
+            // Comprueba simples conflictos para generar uno nuevo automáticamente.
+            while (true) {
+                currentI2C = '0x' + i2cBase.toString(16).toUpperCase();
+                currentI2CSym = '0x' + (i2cBase + 1).toString(16).toUpperCase();
+                let conflict = currentGeometry.customSensors.some(s => s.type === 'tof' && (s.i2cAddress === currentI2C || s.i2cAddressSym === currentI2C || s.i2cAddress === currentI2CSym || s.i2cAddressSym === currentI2CSym));
+                if (!conflict) break;
+                i2cBase += 2;
+                iter++;
+                if (iter > 10) break; // fallback emergency
+            }
+
+            currentGeometry.customSensors.push({ type: 'tof', x_mm: 50, y_mm: 0, angle: 0, maxDistance: 500, i2cAddress: currentI2C, i2cAddressSym: currentI2CSym }); 
             renderCustomSensorsList();
             updateSensorConnectionsUI(currentGeometry.sensorCount);
             window.forceGeometrySync();

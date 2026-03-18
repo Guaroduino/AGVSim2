@@ -16,6 +16,7 @@ export class Track {
         this.fileName = "";    // Name of the track file if loaded
 
         this.watermarkImage = null; // Optional watermark image
+        this.interactiveElements = []; // Stores obstacles, tags, etc.
     }
 
     setWatermark(img) {
@@ -98,6 +99,11 @@ export class Track {
                     this.imageData = maskCtx.getImageData(0, 0, this.width_px, this.height_px);
                 } else {
                     this.imageData = this.offscreenCtx.getImageData(0, 0, this.width_px, this.height_px);
+                }
+                if (sourceCanvas.__interactiveElements) {
+                    this.interactiveElements = sourceCanvas.__interactiveElements;
+                } else {
+                    this.interactiveElements = [];
                 }
                 this.image.src = sourceCanvas.toDataURL(); // Keep an Image object too for consistency
                 resolve(true);
@@ -223,6 +229,7 @@ export class Track {
         this.height_px = 0;
         this.isCustom = false;
         this.fileName = "";
+        this.interactiveElements = [];
         if (this.offscreenCtx) {
             this.offscreenCtx.clearRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
         }

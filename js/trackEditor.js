@@ -17,10 +17,21 @@ let currentToolMode = null; // 'rfid' | 'color' | 'hopper' | 'erase' | null
 
 // Drag state
 let isDraggingInteractive = false;
+let dragTransformMode = '';
+let startRotAngle = 0;
+let dragStartAngle = 0;
+let dragStartX = 0, dragStartY = 0;
+let startElemX = 0, startElemY = 0, startElemW = 0, startElemH = 0;
 let draggedElement = null;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
 let dragMoved = false;
+let trackZoom = 1.0;
+let trackPanX = 0;
+let trackPanY = 0;
+let isPanningTrack = false;
+let trackPanStartX = 0;
+let trackPanStartY = 0;
 
 function toHexByte(value) {
     return (Number(value) & 0xFF).toString(16).toUpperCase().padStart(2, '0');
@@ -258,7 +269,7 @@ export function initTrackEditor(appInterface) {
     }
 
     // Setup event listeners
-    setupInteractiveTools(elems);
+    setupInteractiveTools(elems);\n    setupTrackZoomPan();
     elems.trackGridSizeSelect.addEventListener('change', (e) => {
         const size = e.target.value.split('x');
         currentGridSize = { rows: parseInt(size[0]), cols: parseInt(size[1]) };
@@ -285,6 +296,20 @@ export function initTrackEditor(appInterface) {
     });
 
     // Crear botón de limpiar junto al botón de exportar
+    const btnAddBorder = document.getElementById('btnAddBorder');
+    if (btnAddBorder) {
+        btnAddBorder.addEventListener('click', () => {
+            const w = currentGridSize.cols * TRACK_PART_SIZE_PX;
+            const h = currentGridSize.rows * TRACK_PART_SIZE_PX;
+            const t = 20; // 20 thickness for border
+            interactiveElements.push({ id: Date.now()+1, type: 'obstacle', x: 0, y: -t/2, width: w, height: t, color: '#444', value: 0, rotation: 0 });
+            interactiveElements.push({ id: Date.now()+2, type: 'obstacle', x: 0, y: h - t/2, width: w, height: t, color: '#444', value: 0, rotation: 0 });
+            interactiveElements.push({ id: Date.now()+3, type: 'obstacle', x: -t/2, y: 0, width: t, height: h, color: '#444', value: 0, rotation: 0 });
+            interactiveElements.push({ id: Date.now()+4, type: 'obstacle', x: w - t/2, y: 0, width: t, height: h, color: '#444', value: 0, rotation: 0 });
+            renderEditor();
+        });
+    }
+
     const clearTrackButton = document.getElementById('clearTrackButton');
     if (clearTrackButton) {
         clearTrackButton.addEventListener('click', () => {
@@ -308,31 +333,84 @@ export function initTrackEditor(appInterface) {
         const { p_x, p_y } = coords;
         
         dragMoved = false;
-        
-        let found = null;
-        for(let i = interactiveElements.length-1; i>=0; i--) {
-            let e = interactiveElements[i];
-            if (p_x >= e.x && p_x <= e.x + e.width && p_y >= e.y && p_y <= e.y + e.height) {
-                found = e; break;
-            }
-        }
 
-        if (found && currentToolMode === 'move') { 
-            isDraggingInteractive = true;
-            draggedElement = found;
-            selectedInteractiveElement = found;
-            dragOffsetX = p_x - found.x;
-            dragOffsetY = p_y - found.y;
-            
-            const elems = getDOMElements();
-            if (elems) {
-                 if (elems.intSettWidth) elems.intSettWidth.value = found.width;
-                 if (elems.intSettLength) elems.intSettLength.value = found.height;
-                 if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
-                 if (elems.intSettColor) elems.intSettColor.value = found.color || '#0000ff';
-                 updateInteractiveUI(found.type, elems);
+        if (currentToolMode === 'move') { 
+            if (selectedInteractiveElement) {
+                let el = selectedInteractiveElement;
+                let cx = el.x + el.width / 2;
+                let cy = el.y + el.height / 2;
+                let dx = p_x - cx;
+                let dy = p_y - cy;
+                
+                let angle = el.rotation ? -el.rotation * Math.PI / 180 : 0;
+                let lx = dx * Math.cos(angle) - dy * Math.sin(angle);
+                let ly = dx * Math.sin(angle) + dy * Math.cos(angle);
+                
+                // We use TRACK_PART_SIZE_PX scale space, so handles are scaled there.
+                // But the drawing size is scaled visually. The hitbox should be absolute in track space.
+                const hs = 25; // 25 px radius for hitbox in track coordinate space
+                
+                // Rotation handle (Top center + offset)
+                if (Math.abs(lx) <= hs && Math.abs(ly - (-el.height/2 - 50)) <= hs) {
+                    isDraggingInteractive = true;
+                    draggedElement = el;
+                    dragTransformMode = 'rotate';
+                    startElemX = el.x; startElemY = el.y;
+                    startElemW = el.width; startElemH = el.height;
+                    startRotAngle = el.rotation || 0;
+                    dragStartAngle = Math.atan2(p_y - cy, p_x - cx) * 180 / Math.PI;
+                    return;
+                }
+                
+                // Scale handles (corners)
+                if (Math.abs(lx - (-el.width/2)) <= hs && Math.abs(ly - (-el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_tl'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
+                if (Math.abs(lx - (el.width/2)) <= hs && Math.abs(ly - (-el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_tr'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
+                if (Math.abs(lx - (-el.width/2)) <= hs && Math.abs(ly - (el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_bl'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
+                if (Math.abs(lx - (el.width/2)) <= hs && Math.abs(ly - (el.height/2)) <= hs) { isDraggingInteractive = true; draggedElement = el; dragTransformMode = 'scale_br'; dragStartX = p_x; dragStartY = p_y; startElemX = el.x; startElemY = el.y; startElemW = el.width; startElemH = el.height; return; }
+            }
+
+            let found = null;
+            // Iterate down so top visually clicked first
+            for(let i = interactiveElements.length-1; i>=0; i--) {
+                let el = interactiveElements[i];
+                let cx = el.x + el.width / 2;
+                let cy = el.y + el.height / 2;
+                let dx = p_x - cx;
+                let dy = p_y - cy;
+                
+                let angle = el.rotation ? -el.rotation * Math.PI / 180 : 0;
+                let lx = dx * Math.cos(angle) - dy * Math.sin(angle);
+                let ly = dx * Math.sin(angle) + dy * Math.cos(angle);
+                
+                if (lx >= -el.width/2 && lx <= el.width/2 && ly >= -el.height/2 && ly <= el.height/2) {
+                    found = el; break;
+                }
+            }
+
+            if (found) { 
+                isDraggingInteractive = true;
+                dragTransformMode = 'move';
+                draggedElement = found;
+                selectedInteractiveElement = found;
+                dragOffsetX = p_x - found.x;
+                dragOffsetY = p_y - found.y;
+                startElemX = found.x; startElemY = found.y;
+                startElemW = found.width; startElemH = found.height;
+                
+                const elems = getDOMElements();
+                if (elems) {
+                     if (elems.intSettWidth) elems.intSettWidth.value = Math.round(found.width);
+                     if (elems.intSettLength) elems.intSettLength.value = Math.round(found.height);
+                     if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
+                     if (elems.intSettColor) elems.intSettColor.value = found.color || '#0000ff';
+                     if (elems.intSettRotation) elems.intSettRotation.value = found.rotation || 0;
+                     updateInteractiveUI(found.type, elems);
+                }
+            } else {
+                selectedInteractiveElement = null;
             }
         }
+        renderEditor();
     });
 
     editorCanvas.addEventListener('mousemove', (event) => {
@@ -340,9 +418,50 @@ export function initTrackEditor(appInterface) {
         const coords = getCanvasCoords(event);
         if (!coords) return;
         
-        draggedElement.x = coords.p_x - dragOffsetX;
-        draggedElement.y = coords.p_y - dragOffsetY;
+        let el = draggedElement;
+        const { p_x, p_y } = coords;
         dragMoved = true;
+
+        if (dragTransformMode === 'move') {
+            el.x = p_x - dragOffsetX;
+            el.y = p_y - dragOffsetY;
+        } else if (dragTransformMode === 'rotate') {
+            let cx = el.x + el.width / 2;
+            let cy = el.y + el.height / 2;
+            let curAngle = Math.atan2(p_y - cy, p_x - cx) * 180 / Math.PI;
+            let diff = curAngle - dragStartAngle;
+            el.rotation = Math.round((startRotAngle + diff) / 1) * 1;
+            const elems = getDOMElements();
+            if (elems && elems.intSettRotation) elems.intSettRotation.value = el.rotation;
+        } else if (dragTransformMode.startsWith('scale')) {
+            let dx = p_x - dragStartX;
+            let dy = p_y - dragStartY;
+            
+            let angle = el.rotation ? -el.rotation * Math.PI / 180 : 0;
+            let ldx = dx * Math.cos(angle) - dy * Math.sin(angle);
+            let ldy = dx * Math.sin(angle) + dy * Math.cos(angle);
+            
+            let sW = startElemW;
+            let sH = startElemH;
+            
+            if (dragTransformMode.includes('l')) { sW = startElemW - ldx * 2; } else { sW = startElemW + ldx * 2; }
+            if (dragTransformMode.includes('t')) { sH = startElemH - ldy * 2; } else { sH = startElemH + ldy * 2; }
+            
+            if (sH < 10) sH = 10;
+            if (sW < 10) sW = 10;
+            
+            // To simplify scaling with rotation, we scale symmetrically from the center
+            el.width = sW;
+            el.height = sH;
+            el.x = startElemX + startElemW/2 - el.width/2;
+            el.y = startElemY + startElemH/2 - el.height/2;
+
+            const elems = getDOMElements();
+            if (elems) {
+                if (elems.intSettWidth) elems.intSettWidth.value = Math.round(el.width);
+                if (elems.intSettLength) elems.intSettLength.value = Math.round(el.height);
+            }
+        }
         
         renderEditor();
     });
@@ -350,6 +469,7 @@ export function initTrackEditor(appInterface) {
     editorCanvas.addEventListener('mouseup', (event) => {
         isDraggingInteractive = false;
         draggedElement = null;
+        dragTransformMode = '';
     });
 
     editorCanvas.addEventListener('mouseleave', (event) => {
@@ -1171,8 +1291,6 @@ function loadTrackDesign(event, gridSizeSelect, trackNameInput) {
 function drawInteractiveElements(targetCtx, scaleRatio) {
     interactiveElements.forEach(el => {
         targetCtx.save();
-        
-        // El.x and el.y are in TRACK_PART_SIZE_PX scale space
         const x = el.x * scaleRatio;
         const y = el.y * scaleRatio;
         const w = el.width * scaleRatio;
@@ -1181,9 +1299,7 @@ function drawInteractiveElements(targetCtx, scaleRatio) {
         const cy = y + h / 2;
         
         targetCtx.translate(cx, cy);
-        if (el.rotation) {
-            targetCtx.rotate(el.rotation * Math.PI / 180);
-        }
+        if (el.rotation) targetCtx.rotate(el.rotation * Math.PI / 180);
         
         if (el.type === 'color') {
             targetCtx.fillStyle = el.color || '#0000ff';
@@ -1214,13 +1330,11 @@ function drawInteractiveElements(targetCtx, scaleRatio) {
             targetCtx.lineTo(-w/2, h/2);
             targetCtx.stroke();
         } else if (el.type === 'obstacle') {
-            targetCtx.fillStyle = '#444'; // Dark grey
+            targetCtx.fillStyle = '#444';
             targetCtx.fillRect(-w/2, -h/2, w, h);
-            targetCtx.strokeStyle = 'yellow'; // Yellow border
+            targetCtx.strokeStyle = 'yellow';
             targetCtx.lineWidth = 3 * scaleRatio;
             targetCtx.strokeRect(-w/2, -h/2, w, h);
-            
-            // Add stripes for texture
             targetCtx.strokeStyle = 'yellow';
             targetCtx.lineWidth = 2 * scaleRatio;
             targetCtx.beginPath();
@@ -1242,6 +1356,24 @@ function drawInteractiveElements(targetCtx, scaleRatio) {
             targetCtx.setLineDash([5 * scaleRatio, 5 * scaleRatio]);
             targetCtx.strokeRect(-w/2 - 2*scaleRatio, -h/2 - 2*scaleRatio, w + 4*scaleRatio, h + 4*scaleRatio);
             targetCtx.setLineDash([]);
+            
+            if (currentToolMode === 'move') {
+                targetCtx.fillStyle = 'cyan';
+                const hs = 8 * scaleRatio;
+                targetCtx.fillRect(-w/2 - hs/2, -h/2 - hs/2, hs, hs); // TL
+                targetCtx.fillRect(w/2 - hs/2, -h/2 - hs/2, hs, hs);  // TR
+                targetCtx.fillRect(-w/2 - hs/2, h/2 - hs/2, hs, hs);  // BL
+                targetCtx.fillRect(w/2 - hs/2, h/2 - hs/2, hs, hs);   // BR
+                
+                targetCtx.beginPath();
+                targetCtx.moveTo(0, -h/2);
+                targetCtx.lineTo(0, -h/2 - 20 * scaleRatio);
+                targetCtx.stroke();
+                
+                targetCtx.beginPath();
+                targetCtx.arc(0, -h/2 - 25 * scaleRatio, 5 * scaleRatio, 0, Math.PI * 2);
+                targetCtx.fill();
+            }
         }
         targetCtx.restore();
     });
@@ -1307,6 +1439,7 @@ function exportTrackAsCanvas() {
 
     // Attach line-only mask so Track can use it for IR sampling.
     exportCanvas.__lineMaskCanvas = lineMaskCanvas;
+    exportCanvas.__interactiveElements = JSON.parse(JSON.stringify(interactiveElements));
     exportCanvas.dataset.fromEditor = 'true';
     return exportCanvas;
 }
@@ -1422,11 +1555,11 @@ function setupInteractiveTools(elems) {
                 
                 tools.forEach(other => {
                     const ob = document.getElementById(other.id);
-                    if(ob) ob.style.boxShadow = '';
+                    if (ob) { ob.style.boxShadow = ''; ob.style.backgroundColor = ''; ob.style.color = ''; }
                 });
                 
                 if (!isActive) {
-                    btn.style.boxShadow = '0 0 0 2px var(--primary-color) inset';
+                    btn.style.boxShadow = '0 0 0 2px var(--primary-color) inset'; btn.style.backgroundColor = 'var(--primary-color)'; btn.style.color = 'white';
                 }
                 
                 updateInteractiveUI(currentToolMode, elems);
@@ -1480,4 +1613,95 @@ function updateSelectedInteractiveElement() {
         selectedInteractiveElement.color = elems.intSettColor.value || '#0000ff';
         renderEditor();
     }
+}
+
+function setupTrackZoomPan() {
+    const trackPanBtn = document.getElementById('trackPanBtn');
+    const trackZoomInBtn = document.getElementById('trackZoomInBtn');
+    const trackZoomOutBtn = document.getElementById('trackZoomOutBtn');
+    const trackZoomResetBtn = document.getElementById('trackZoomResetBtn');
+    const trackZoomExtentsBtn = document.getElementById('trackZoomExtentsBtn');
+
+    if (trackZoomInBtn) trackZoomInBtn.addEventListener('click', () => { trackZoom = Math.min(5.0, trackZoom + 0.2); renderEditor(); });
+    if (trackZoomOutBtn) trackZoomOutBtn.addEventListener('click', () => { trackZoom = Math.max(0.1, trackZoom - 0.2); renderEditor(); });
+    if (trackZoomResetBtn) trackZoomResetBtn.addEventListener('click', () => { trackZoom = 1.0; trackPanX = 0; trackPanY = 0; renderEditor(); });
+
+    if (trackPanBtn) {
+        trackPanBtn.addEventListener('click', () => {
+            isPanningTrack = !isPanningTrack;
+            if (isPanningTrack) {
+                trackPanBtn.style.backgroundColor = 'var(--primary-color)'; trackPanBtn.style.color = 'white'; editorCanvas.style.cursor = 'grab';
+            } else {
+                trackPanBtn.style.backgroundColor = ''; trackPanBtn.style.color = ''; editorCanvas.style.cursor = 'default';
+            }
+        });
+    }
+
+    if (trackZoomExtentsBtn) trackZoomExtentsBtn.addEventListener('click', zoomToExtents);
+
+    if (editorCanvas) {
+        editorCanvas.addEventListener('wheel', (event) => {
+            if (!event.ctrlKey) return; 
+            event.preventDefault();
+            const zoomStep = Math.max(0.05, trackZoom * 0.1);
+            const previousZoom = trackZoom;
+            if (event.deltaY < 0) trackZoom = Math.min(5.0, trackZoom + zoomStep);
+            else trackZoom = Math.max(0.1, trackZoom - zoomStep);
+
+            const rect = editorCanvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+
+            trackPanX = mouseX - (mouseX - trackPanX) * (trackZoom / previousZoom);
+            trackPanY = mouseY - (mouseY - trackPanY) * (trackZoom / previousZoom);
+            renderEditor();
+        }, { passive: false });
+
+        editorCanvas.addEventListener('mousedown', (event) => {
+            if (event.button === 1 || isPanningTrack) {
+                isPanningTrack = true;
+                if(trackPanBtn) { trackPanBtn.style.backgroundColor = 'var(--primary-color)'; trackPanBtn.style.color = 'white'; }
+                editorCanvas.style.cursor = 'grabbing';
+                trackPanStartX = event.clientX;
+                trackPanStartY = event.clientY;
+            }
+        });
+
+        window.addEventListener('mousemove', (event) => {
+            if (isPanningTrack && editorCanvas && event.buttons !== 0) {
+                trackPanX += event.clientX - trackPanStartX;
+                trackPanY += event.clientY - trackPanStartY;
+                trackPanStartX = event.clientX;
+                trackPanStartY = event.clientY;
+                renderEditor();
+            }
+        });
+
+        window.addEventListener('mouseup', (event) => {
+            if (isPanningTrack && event.button === 1) { // Middle click release
+                isPanningTrack = false;
+                if(trackPanBtn) { trackPanBtn.style.backgroundColor = ''; trackPanBtn.style.color = ''; }
+                editorCanvas.style.cursor = 'default';
+            } else if (isPanningTrack && event.buttons === 0 && event.button === 0) { // Left click released but still in pan mode
+                 editorCanvas.style.cursor = 'grab';
+            }
+        });
+    }
+}
+
+function zoomToExtents() {
+    if(!editorCanvas) return;
+    const padding = 40;
+    const cellSize = editorCanvas.width / Math.max(currentGridSize.rows, currentGridSize.cols);
+    const contentW = currentGridSize.cols * cellSize;
+    const contentH = currentGridSize.rows * cellSize;
+
+    if (contentW === 0 || contentH === 0) { trackZoom = 1; trackPanX = 0; trackPanY = 0; renderEditor(); return; }
+
+    const scaleX = (editorCanvas.width - padding*2) / contentW;
+    const scaleY = (editorCanvas.height - padding*2) / contentH;
+    trackZoom = Math.min(Math.min(scaleX, scaleY), 5.0);
+    trackPanX = (editorCanvas.width - contentW * trackZoom) / 2;
+    trackPanY = (editorCanvas.height - contentH * trackZoom) / 2;
+    renderEditor();
 }

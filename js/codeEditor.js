@@ -216,7 +216,7 @@ class MockAdafruitTCS34725 {
 
 class MockAdafruitVL53L0X {
     begin(i2cAddress = 0x29, debug = false, wire = null, sensorConfig = null) {
-        this.i2cAddress = i2cAddress;
+        this.i2cAddress = Number(i2cAddress);
         this.debug = debug;
         this.wire = wire;
         this.sensorConfig = sensorConfig;
@@ -224,9 +224,45 @@ class MockAdafruitVL53L0X {
     }
 
     readRange() {
-        // TODO: Reemplazar por cálculo real de distancia en mm desde el motor físico.
-        const mm = sharedSimulationState?.robot?.sensors?.tofMm;
+        const robot = sharedSimulationState?.robot;
+        if (!robot || !robot.sensors) return 250;
+
+        // Si tenemos la dirección i2c guardada desde `begin()`, buscar específicamente el sensor ToF que tenga esta dirección.
+        if (robot.customSensors && Array.isArray(robot.customSensors)) {
+            const targetI2C = this.i2cAddress;
+            for (let i = 0; i < robot.customSensors.length; i++) {
+                const s = robot.customSensors[i];
+                if (s && s.type === 'tof') {
+                    let sI2c = 0x29; // default
+                    if (s.i2cAddress !== undefined) sI2c = Number(s.i2cAddress);
+
+                    if (sI2c === targetI2C) {
+                        const val = robot.sensors[`custom_${i}_distance_mm`];
+                        if (typeof val === 'number' && Number.isFinite(val)) {
+                            return Math.max(0, Math.round(val));
+                        }
+                    }
+
+                    // Check symmetric twin if it exists
+                    if (s.symmetric) {
+                        let symI2c = 0x2A; // default separate address
+                        if (s.i2cAddressSym !== undefined) symI2c = Number(s.i2cAddressSym);
+
+                        if (symI2c === targetI2C) {
+                            const valSym = robot.sensors[`custom_${i}_sym_distance_mm`];
+                            if (typeof valSym === 'number' && Number.isFinite(valSym)) {
+                                return Math.max(0, Math.round(valSym));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback global en caso de no identificar instancias
+        const mm = robot.sensors.tofMm;
         if (typeof mm === 'number' && Number.isFinite(mm)) return Math.max(0, Math.round(mm));
+        
         return 250;
     }
 }

@@ -816,6 +816,19 @@ hr {
     align-items: start;
 }
 
+.robot-preview {
+    position: sticky;
+    top: 20px;
+    z-index: 10;
+}
+
+/* Envolvemos en max-height para habilitar scroll independiente */
+.robot-parameters {
+    max-height: calc(100vh - 180px); /* Ajustado para dar espacio al viewport, cabecera y footer */
+    overflow-y: auto;
+    padding-right: 15px; /* Scrollbar padding para no cortar bordes */
+}
+
 .preview-header {
     display: flex;
     justify-content: space-between;

@@ -1,113 +1,48 @@
-const fs = require('fs');
-let file = fs.readFileSync('js/robot.js', 'utf8');
+﻿const fs = require('fs');
+let code = fs.readFileSync('js/robotEditor.js', 'utf8');
 
-// The replacement: adding isRGB, isRFID, customIdx, mapping variables
-let target = \              let numP = 1;
-              let isIR = true;
-              let isToF = false;
-              let isLED = false;
-              let ledColor = '#ff0000';
-              let tofIdx = -1;
-              let tofAngle = 0;
-              if (key.startsWith('custom_')) {\;
+code = code.replace(
+    /if \\(sensor\\.type === 'tof'\\) \\{\\s*let dispAngle = sensor\\.angle \\|\\| 0;\\s*if \\(isClone\\) dispAngle = -dispAngle;/,
+    \if (sensor.type === 'tof') {
+                    let dispAngle = sensor.angle || 0;
+                    if (isClone) {
+                        dispAngle = 180 - dispAngle;
+                        if (dispAngle > 180) dispAngle -= 360;
+                    }\
+);
 
-let repl = \              let currentDrawRadiusPx = sensorRadiusPx;
+code = code.replace(
+    /value="\\$\\{sensor\\.i2cAddress \\|\\| '0x29'\\}" placeholder="I2C" style="width: 50px; font-size: 0\\.8em;" title="([^"]+)" \\$\\{isClone \\? 'disabled' : ''\\}>/g,
+    \alue="\\\" placeholder="I2C" style="width: 50px; font-size: 0.8em;" title="\">\
+);
 
-              let numP = 1;
-              let isIR = true;
-              let isToF = false;
-              let isLED = false;
-              let isRGB = false;
-              let isRFID = false;
-              let ledColor = '#ff0000';
-              let customIdx = -1;
-              let tofIdx = -1;
-              let tofAngle = 0;
-              
-              if (key.startsWith('custom_')) {
-                  currentDrawRadiusPx = Math.max(3, 0.005 * PIXELS_PER_METER); // 10mm fixed default for custom IRs vs global size
-\;
+code = code.replace(
+    /if \\(cA\\) cA\\.value = -\\(currentGeometry\\.customSensors\\[idx\\]\\.angle \\|\\| 0\\);/g,
+    \if (cA) {
+                               let a = 180 - (currentGeometry.customSensors[idx].angle || 0);
+                               if (a > 180) a -= 360;
+                               cA.value = a;
+                           }\
+);
 
-file = file.replace(target, repl);
+code = code.replace(
+    /if \\(inI2C\\) \\{\\s*const cI = cloneItem\\.querySelector\\(\#customSensorI2C_\\$\\{idx\\}_sym\\\);\\s*if \\(cI\\) cI\\.value = currentGeometry\\.customSensors\\[idx\\]\\.i2cAddress \\|\\| '0x29';\\s*\\}/g,
+    \// Independently handled I2C\
+);
 
-let target2 = \                      if (cSens.type === 'led') {
-                          isLED = true;
-                          ledColor = cSens.color || '#ff0000';
-                      }
-                  }
-              }\;
+code = code.replace(
+    /if \\(inDiam\\) inDiam\\.addEventListener\\('input', updateVal\\);/g,
+    \if (inDiam) inDiam.addEventListener('input', updateVal);
+            if (cloneItem) {
+                const cI = cloneItem.querySelector(\\\#customSensorI2C_\\\_sym\\\);
+                if (cI) {
+                    cI.addEventListener('input', () => {
+                        currentGeometry.customSensors[idx].i2cAddressSym = cI.value;
+                        window.forceGeometrySync();
+                    });
+                }
+            }\
+);
 
-let repl2 = \                      if (cSens.type === 'led') {
-                          isLED = true;
-                          ledColor = cSens.color || '#ff0000';
-                      }
-                      if (cSens.type === 'rgb') isRGB = true;
-                      if (cSens.type === 'rfid') isRFID = true;
-                      
-                      // Overwrite radius if it has a explicit param
-                      if (cSens.detectionDiameter) {
-                          currentDrawRadiusPx = Math.max(2, (parseFloat(cSens.detectionDiameter) / 1000 / 2) * PIXELS_PER_METER);
-                      }
-                      
-                      customIdx = idx;
-                  }
-              }\;
-
-file = file.replace(target2, repl2);
-
-let drawBlockStart = file.indexOf('ctx.save();', file.indexOf('if (key.startsWith(\\'custom_\\')'));
-let strToFix = file.substring(drawBlockStart, file.indexOf('let pinNumber', drawBlockStart));
-strToFix = strToFix.replace(/sensorRadiusPx/g, 'currentDrawRadiusPx');
-
-let fallbackTarget = \              } else {
-                  ctx.beginPath();
-                  ctx.arc(0, 0, currentDrawRadiusPx, 0, 2 * Math.PI);
-                  ctx.fillStyle = isOnLine ? 'lime' : 'gray';
-                  ctx.fill();
-                  ctx.strokeStyle = 'black';
-                  ctx.lineWidth = 1;
-                  ctx.stroke();
-              }
-              ctx.restore();\;
-
-let fallbackRepl = \              } else if (isRGB || isRFID) {
-                  // Dashed circle for detection radius (in currentDrawRadiusPx)
-                  ctx.beginPath();
-                  ctx.arc(0, 0, currentDrawRadiusPx, 0, 2 * Math.PI);
-                  ctx.strokeStyle = isRGB ? 'blue' : 'purple';
-                  ctx.setLineDash([4, 4]);
-                  ctx.stroke();
-                  ctx.setLineDash([]); // reset dash
-
-                  // Rectangle for the sensor body
-                  ctx.fillStyle = 'white';
-                  ctx.strokeStyle = 'black';
-                  ctx.lineWidth = 1;
-                  const rw = 40; // rectangle width
-                  const rh = 16;
-                  ctx.fillRect(-rw/2, -rh/2, rw, rh);
-                  ctx.strokeRect(-rw/2, -rh/2, rw, rh);
-
-                  // Text inside
-                  ctx.fillStyle = 'black';
-                  ctx.font = 'bold 9px Arial';
-                  ctx.textAlign = 'center';
-                  ctx.textBaseline = 'middle';
-                  ctx.fillText(\\\\\\\\, 0, 0);
-
-              } else {
-                  ctx.beginPath();
-                  ctx.arc(0, 0, currentDrawRadiusPx, 0, 2 * Math.PI);
-                  ctx.fillStyle = isOnLine ? 'lime' : 'gray';
-                  ctx.fill();
-                  ctx.strokeStyle = 'black';
-                  ctx.lineWidth = 1;
-                  ctx.stroke();
-              }
-              ctx.restore();\;
-
-strToFix = strToFix.replace(fallbackTarget, fallbackRepl);
-
-file = file.substring(0, drawBlockStart) + strToFix + file.substring(file.indexOf('let pinNumber', drawBlockStart));
-
-fs.writeFileSync('js/robot.js', file);
+fs.writeFileSync('js/robotEditor.js', code);
+console.log('Fixed robotEditor.js');

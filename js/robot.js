@@ -673,7 +673,7 @@ export class Robot {
 
                           // Invert the angle display if this is the symmetric twin, mirroring the math in robotEditor.js
                           if (key.endsWith('_sym')) {
-                              tofAngle = -tofAngle;
+                                tofAngle = 180 - tofAngle;
                           }
                       }
                       if (cSens.type === 'led') {
@@ -726,7 +726,15 @@ export class Robot {
                   ctx.rotate(rad);
                   ctx.beginPath();
                   ctx.moveTo(0, 0);
-                  ctx.lineTo(currentDrawRadiusPx * 9, 0); // Give it a visible length
+                  
+                  // Extract the measured distance from sensor readings if available
+                  let measured_mm = sensorReadings[key + '_distance_mm'];
+                  let drawLen = currentDrawRadiusPx * 9; // Fallback default length
+                  if (typeof measured_mm === 'number') {
+                      drawLen = (measured_mm / 1000) * PIXELS_PER_METER;
+                  }
+                  
+                  ctx.lineTo(drawLen, 0); 
                   ctx.strokeStyle = 'orange';
                   ctx.lineWidth = 2;
                   ctx.stroke();
