@@ -27,6 +27,7 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 let dragMoved = false;
 let suppressNextClick = false;
+let draggedGroupSnapshot = null;
 let trackZoom = 1.0;
 let trackPanX = 0;
 let trackPanY = 0;
@@ -94,7 +95,8 @@ function hydrateInteractiveElements(rawElements) {
             value: raw.value ?? '',
             color: raw.color || '#0000ff',
             shape: raw.shape || 'rect',
-            rotation: Number(raw.rotation) || 0
+            rotation: Number(raw.rotation) || 0,
+            importGroupId: raw.importGroupId || null
         };
 
         if (type === 'rfid') {
@@ -106,6 +108,65 @@ function hydrateInteractiveElements(rawElements) {
     });
 
     return loaded;
+}
+
+function isGroupSelection(el) {
+    return !!(el && el.isGroupSelection && el.importGroupId);
+}
+
+function getElementsByImportGroupId(groupId) {
+    return interactiveElements.filter(el => el && el.importGroupId === groupId);
+}
+
+function getGroupBounds(groupId) {
+    const members = getElementsByImportGroupId(groupId);
+    if (!members.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    members.forEach(el => {
+        minX = Math.min(minX, el.x);
+        minY = Math.min(minY, el.y);
+        maxX = Math.max(maxX, el.x + el.width);
+        maxY = Math.max(maxY, el.y + el.height);
+    });
+    return {
+        x: minX,
+        y: minY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY)
+    };
+}
+
+function createGroupSelectionProxy(groupId) {
+    const b = getGroupBounds(groupId);
+    if (!b) return null;
+    return {
+        id: `group_${groupId}`,
+        type: 'obstacle',
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        rotation: 0,
+        isGroupSelection: true,
+        importGroupId: groupId
+    };
+}
+
+function refreshGroupSelectionProxy() {
+    if (!isGroupSelection(selectedInteractiveElement)) return;
+    const proxy = createGroupSelectionProxy(selectedInteractiveElement.importGroupId);
+    if (proxy) selectedInteractiveElement = proxy;
+}
+
+function buildGroupDragSnapshot(groupId) {
+    return getElementsByImportGroupId(groupId).map(el => ({
+        ref: el,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        rotation: el.rotation || 0
+    }));
 }
 
 // Directions for connection logic
@@ -334,6 +395,16 @@ export function initTrackEditor(appInterface) {
     elems.loadTrackDesignInput.addEventListener('change', (event) => {
         loadTrackDesign(event, elems.trackGridSizeSelect, elems.trackEditorTrackNameInput);
     });
+    if (elems.loadTrackObstaclesSvgInput) {
+        elems.loadTrackObstaclesSvgInput.addEventListener('change', (event) => {
+            importObstaclesFromSVG(event, false);
+        });
+    }
+    if (elems.loadTrackObstaclesSvgFitInput) {
+        elems.loadTrackObstaclesSvgFitInput.addEventListener('change', (event) => {
+            importObstaclesFromSVG(event, true);
+        });
+    }
 
     editorCanvas.addEventListener('mousedown', (event) => {
         if (isPanningTrack || event.button === 1) return;
@@ -365,6 +436,7 @@ export function initTrackEditor(appInterface) {
                 if ((rdx * rdx + rdy * rdy) <= hs2) {
                     isDraggingInteractive = true;
                     draggedElement = el;
+                    draggedGroupSnapshot = isGroupSelection(el) ? buildGroupDragSnapshot(el.importGroupId) : null;
                     dragTransformMode = 'rotate';
                     startElemX = el.x; startElemY = el.y;
                     startElemW = el.width; startElemH = el.height;
@@ -399,6 +471,7 @@ export function initTrackEditor(appInterface) {
                 if (closestHandle) {
                     isDraggingInteractive = true;
                     draggedElement = el;
+                    draggedGroupSnapshot = isGroupSelection(el) ? buildGroupDragSnapshot(el.importGroupId) : null;
                     dragTransformMode = closestHandle.mode;
                     dragStartX = p_x;
                     dragStartY = p_y;
@@ -432,15 +505,22 @@ export function initTrackEditor(appInterface) {
             if (found) { 
                 isDraggingInteractive = true;
                 dragTransformMode = 'move';
-                draggedElement = found;
-                selectedInteractiveElement = found;
-                dragOffsetX = p_x - found.x;
-                dragOffsetY = p_y - found.y;
-                startElemX = found.x; startElemY = found.y;
-                startElemW = found.width; startElemH = found.height;
+                if (found.importGroupId) {
+                    selectedInteractiveElement = createGroupSelectionProxy(found.importGroupId) || found;
+                    draggedElement = selectedInteractiveElement;
+                    draggedGroupSnapshot = buildGroupDragSnapshot(found.importGroupId);
+                } else {
+                    draggedElement = found;
+                    selectedInteractiveElement = found;
+                    draggedGroupSnapshot = null;
+                }
+                dragOffsetX = p_x - selectedInteractiveElement.x;
+                dragOffsetY = p_y - selectedInteractiveElement.y;
+                startElemX = selectedInteractiveElement.x; startElemY = selectedInteractiveElement.y;
+                startElemW = selectedInteractiveElement.width; startElemH = selectedInteractiveElement.height;
                 
                 const elems = getDOMElements();
-                if (elems) {
+                if (elems && !found.importGroupId) {
                      if (elems.intSettWidth) elems.intSettWidth.value = Math.round(found.width);
                      if (elems.intSettLength) elems.intSettLength.value = Math.round(found.height);
                      if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
@@ -451,6 +531,7 @@ export function initTrackEditor(appInterface) {
                 }
             } else {
                 selectedInteractiveElement = null;
+                draggedGroupSnapshot = null;
             }
         }
         renderEditor();
@@ -464,6 +545,95 @@ export function initTrackEditor(appInterface) {
         let el = draggedElement;
         const { p_x, p_y } = coords;
         dragMoved = true;
+
+        if (isGroupSelection(el) && draggedGroupSnapshot && draggedGroupSnapshot.length > 0) {
+            const startCx = startElemX + startElemW / 2;
+            const startCy = startElemY + startElemH / 2;
+
+            if (dragTransformMode === 'move') {
+                const newX = p_x - dragOffsetX;
+                const newY = p_y - dragOffsetY;
+                const ddx = newX - startElemX;
+                const ddy = newY - startElemY;
+                draggedGroupSnapshot.forEach(s => {
+                    s.ref.x = s.x + ddx;
+                    s.ref.y = s.y + ddy;
+                });
+            } else if (dragTransformMode === 'rotate') {
+                const curAngle = Math.atan2(p_y - startCy, p_x - startCx) * 180 / Math.PI;
+                const diffDeg = curAngle - dragStartAngle;
+                const rad = diffDeg * Math.PI / 180;
+                const cosR = Math.cos(rad);
+                const sinR = Math.sin(rad);
+
+                draggedGroupSnapshot.forEach(s => {
+                    const scx = s.x + s.width / 2;
+                    const scy = s.y + s.height / 2;
+                    const rx = scx - startCx;
+                    const ry = scy - startCy;
+                    const ncx = startCx + rx * cosR - ry * sinR;
+                    const ncy = startCy + rx * sinR + ry * cosR;
+                    s.ref.x = ncx - s.width / 2;
+                    s.ref.y = ncy - s.height / 2;
+                    s.ref.rotation = Math.round((s.rotation + diffDeg) / 1) * 1;
+                });
+            } else if (dragTransformMode.startsWith('scale')) {
+                const dx = p_x - dragStartX;
+                const dy = p_y - dragStartY;
+                const ldx = dx;
+                const ldy = dy;
+
+                let sW = startElemW;
+                let sH = startElemH;
+
+                if (['scale_t', 'scale_b', 'scale_l', 'scale_r'].includes(dragTransformMode)) {
+                    if (dragTransformMode === 'scale_l') sW = startElemW - ldx * 2;
+                    if (dragTransformMode === 'scale_r') sW = startElemW + ldx * 2;
+                    if (dragTransformMode === 'scale_t') sH = startElemH - ldy * 2;
+                    if (dragTransformMode === 'scale_b') sH = startElemH + ldy * 2;
+                } else {
+                    const halfW0 = Math.max(1, startElemW / 2);
+                    const halfH0 = Math.max(1, startElemH / 2);
+                    const nx = (p_x - startCx) / halfW0;
+                    const ny = (p_y - startCy) / halfH0;
+                    let dirX = 1;
+                    let dirY = 1;
+                    if (dragTransformMode === 'scale_tl') { dirX = -1; dirY = -1; }
+                    if (dragTransformMode === 'scale_tr') { dirX = 1; dirY = -1; }
+                    if (dragTransformMode === 'scale_bl') { dirX = -1; dirY = 1; }
+                    if (dragTransformMode === 'scale_br') { dirX = 1; dirY = 1; }
+                    const diagonalProjection = (nx * dirX + ny * dirY) / Math.SQRT2;
+                    const factor = Math.max(0.05, diagonalProjection / Math.SQRT2);
+                    sW = startElemW * factor;
+                    sH = startElemH * factor;
+                }
+
+                if (sH < 10) sH = 10;
+                if (sW < 10) sW = 10;
+
+                const scaleX = sW / Math.max(1, startElemW);
+                const scaleY = sH / Math.max(1, startElemH);
+
+                draggedGroupSnapshot.forEach(s => {
+                    const scx = s.x + s.width / 2;
+                    const scy = s.y + s.height / 2;
+                    const rx = scx - startCx;
+                    const ry = scy - startCy;
+                    const ncx = startCx + rx * scaleX;
+                    const ncy = startCy + ry * scaleY;
+                    const nw = Math.max(1, s.width * scaleX);
+                    const nh = Math.max(1, s.height * scaleY);
+                    s.ref.width = nw;
+                    s.ref.height = nh;
+                    s.ref.x = ncx - nw / 2;
+                    s.ref.y = ncy - nh / 2;
+                });
+            }
+
+            refreshGroupSelectionProxy();
+            renderEditor();
+            return;
+        }
 
         if (dragTransformMode === 'move') {
             el.x = p_x - dragOffsetX;
@@ -543,12 +713,14 @@ export function initTrackEditor(appInterface) {
     editorCanvas.addEventListener('mouseup', (event) => {
         isDraggingInteractive = false;
         draggedElement = null;
+        draggedGroupSnapshot = null;
         dragTransformMode = '';
     });
 
     editorCanvas.addEventListener('mouseleave', (event) => {
         isDraggingInteractive = false;
         draggedElement = null;
+        draggedGroupSnapshot = null;
     });
 
     editorCanvas.addEventListener('click', (event) => {
@@ -839,9 +1011,9 @@ function onGridSingleClick(event) {
             }
         }
         if (found) {
-            selectedInteractiveElement = found;
+            selectedInteractiveElement = found.importGroupId ? (createGroupSelectionProxy(found.importGroupId) || found) : found;
             const elems = getDOMElements();
-            if (elems) {
+            if (elems && !found.importGroupId) {
                  if (elems.intSettWidth) elems.intSettWidth.value = found.width;
                  if (elems.intSettLength) elems.intSettLength.value = found.height;
                  if (elems.intSettValue) elems.intSettValue.value = found.value || 0;
@@ -1213,7 +1385,8 @@ function saveTrackDesign() {
             value: el.value,
             color: el.color,
             shape: el.shape || 'rect',
-            rotation: el.rotation || 0
+            rotation: el.rotation || 0,
+            importGroupId: el.importGroupId || null
         })),
         trackName: trackName
     };
@@ -1307,6 +1480,228 @@ function loadTrackDesign(event, gridSizeSelect, trackNameInput) {
     };
     reader.readAsText(file);
     event.target.value = null; // Reset file input
+}
+
+function parseSvgLength(value) {
+    if (value == null) return NaN;
+    const n = parseFloat(String(value).replace(',', '.'));
+    return Number.isFinite(n) ? n : NaN;
+}
+
+function parseSvgColor(node) {
+    if (!node) return '#444444';
+    const fillAttr = (node.getAttribute('fill') || '').trim();
+    let fill = fillAttr;
+    if (!fill && node.getAttribute('style')) {
+        const style = node.getAttribute('style');
+        const m = style.match(/(?:^|;)\s*fill\s*:\s*([^;]+)/i);
+        if (m) fill = m[1].trim();
+    }
+    if (!fill || fill.toLowerCase() === 'none') return '#444444';
+    return fill;
+}
+
+function parseSvgPolygonPoints(pointsAttr) {
+    const raw = String(pointsAttr || '').trim();
+    if (!raw) return [];
+    const nums = raw.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || [];
+    const pts = [];
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+        const x = parseFloat(nums[i]);
+        const y = parseFloat(nums[i + 1]);
+        if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ x, y });
+    }
+    return pts;
+}
+
+function importObstaclesFromSVG(event, fitToTrack) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const svgText = String(e.target.result || '');
+            const parser = new DOMParser();
+            const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+            const root = svgDoc.documentElement;
+
+            if (!root || root.nodeName.toLowerCase() !== 'svg') {
+                throw new Error('El archivo no contiene un SVG válido.');
+            }
+
+            const vb = (root.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+            let svgW = NaN;
+            let svgH = NaN;
+            let vbMinX = 0;
+            let vbMinY = 0;
+            if (vb.length === 4 && vb.every(Number.isFinite)) {
+                vbMinX = vb[0];
+                vbMinY = vb[1];
+                svgW = vb[2];
+                svgH = vb[3];
+            } else {
+                svgW = parseSvgLength(root.getAttribute('width'));
+                svgH = parseSvgLength(root.getAttribute('height'));
+            }
+
+            if (!Number.isFinite(svgW) || !Number.isFinite(svgH) || svgW <= 0 || svgH <= 0) {
+                throw new Error('No se pudo determinar tamaño del SVG (width/height o viewBox).');
+            }
+
+            const trackW = currentGridSize.cols * TRACK_PART_SIZE_PX;
+            const trackH = currentGridSize.rows * TRACK_PART_SIZE_PX;
+
+            const svgShapes = Array.from(root.querySelectorAll('rect,circle,ellipse,polygon'));
+            const parsedObstacles = [];
+            let importedCount = 0;
+            let skippedCount = 0;
+
+            for (const node of svgShapes) {
+                const tag = node.tagName.toLowerCase();
+                const color = parseSvgColor(node);
+
+                if (tag === 'rect') {
+                    const x = parseSvgLength(node.getAttribute('x')) || 0;
+                    const y = parseSvgLength(node.getAttribute('y')) || 0;
+                    const w = parseSvgLength(node.getAttribute('width'));
+                    const h = parseSvgLength(node.getAttribute('height'));
+                    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) { skippedCount++; continue; }
+                    parsedObstacles.push({
+                        x: x - vbMinX,
+                        y: y - vbMinY,
+                        width: w,
+                        height: h,
+                        color,
+                        shape: 'rect'
+                    });
+                    continue;
+                }
+
+                if (tag === 'circle') {
+                    const cx = parseSvgLength(node.getAttribute('cx')) || 0;
+                    const cy = parseSvgLength(node.getAttribute('cy')) || 0;
+                    const r = parseSvgLength(node.getAttribute('r'));
+                    if (!Number.isFinite(r) || r <= 0) { skippedCount++; continue; }
+                    const w = 2 * r;
+                    const h = 2 * r;
+                    parsedObstacles.push({
+                        x: cx - r - vbMinX,
+                        y: cy - r - vbMinY,
+                        width: w,
+                        height: h,
+                        color,
+                        shape: 'circle'
+                    });
+                    continue;
+                }
+
+                if (tag === 'ellipse') {
+                    const cx = parseSvgLength(node.getAttribute('cx')) || 0;
+                    const cy = parseSvgLength(node.getAttribute('cy')) || 0;
+                    const rx = parseSvgLength(node.getAttribute('rx'));
+                    const ry = parseSvgLength(node.getAttribute('ry'));
+                    if (!Number.isFinite(rx) || !Number.isFinite(ry) || rx <= 0 || ry <= 0) { skippedCount++; continue; }
+                    const w = 2 * rx;
+                    const h = 2 * ry;
+                    parsedObstacles.push({
+                        x: cx - rx - vbMinX,
+                        y: cy - ry - vbMinY,
+                        width: w,
+                        height: h,
+                        color,
+                        shape: 'circle'
+                    });
+                    continue;
+                }
+
+                if (tag === 'polygon') {
+                    const pts = parseSvgPolygonPoints(node.getAttribute('points'));
+                    if (pts.length < 3) { skippedCount++; continue; }
+
+                    const xs = pts.map(p => p.x);
+                    const ys = pts.map(p => p.y);
+                    const minX = Math.min(...xs);
+                    const maxX = Math.max(...xs);
+                    const minY = Math.min(...ys);
+                    const maxY = Math.max(...ys);
+                    const w = maxX - minX;
+                    const h = maxY - minY;
+                    if (w <= 0 || h <= 0) { skippedCount++; continue; }
+
+                    const shape = pts.length === 3 ? 'triangle' : 'rect';
+                    parsedObstacles.push({
+                        x: minX - vbMinX,
+                        y: minY - vbMinY,
+                        width: w,
+                        height: h,
+                        color,
+                        shape
+                    });
+                }
+            }
+
+            if (parsedObstacles.length === 0) {
+                throw new Error('No se encontraron obstáculos SVG importables (rect/circle/ellipse/polygon).');
+            }
+
+            let sourceMinX = 0;
+            let sourceMinY = 0;
+            let sourceW = svgW;
+            let sourceH = svgH;
+
+            if (fitToTrack) {
+                sourceMinX = Math.min(...parsedObstacles.map(o => o.x));
+                sourceMinY = Math.min(...parsedObstacles.map(o => o.y));
+                const sourceMaxX = Math.max(...parsedObstacles.map(o => o.x + o.width));
+                const sourceMaxY = Math.max(...parsedObstacles.map(o => o.y + o.height));
+                sourceW = sourceMaxX - sourceMinX;
+                sourceH = sourceMaxY - sourceMinY;
+                if (sourceW <= 0 || sourceH <= 0) {
+                    throw new Error('El bounding box del SVG es inválido para escalar a pista completa.');
+                }
+            }
+
+            const sx = fitToTrack ? (trackW / sourceW) : 1;
+            const sy = fitToTrack ? (trackH / sourceH) : 1;
+
+            const importGroupId = `svg_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+            for (const o of parsedObstacles) {
+                interactiveElements.push({
+                    id: Date.now() + Math.floor(Math.random() * 100000),
+                    type: 'obstacle',
+                    x: (o.x - sourceMinX) * sx,
+                    y: (o.y - sourceMinY) * sy,
+                    width: Math.max(1, o.width * sx),
+                    height: Math.max(1, o.height * sy),
+                    value: '',
+                    color: o.color,
+                    shape: o.shape,
+                    rotation: 0,
+                    importGroupId
+                });
+                importedCount++;
+            }
+
+            selectedInteractiveElement = null;
+            renderEditor();
+
+            const modeText = fitToTrack ? 'escalado a pista completa' : 'sin escalar';
+            alert(`SVG importado (${modeText}). Obstáculos agregados: ${importedCount}. Omitidos: ${skippedCount}.`);
+        } catch (error) {
+            console.error('Error al importar SVG:', error);
+            alert(`Error al importar SVG: ${error.message}`);
+        } finally {
+            event.target.value = null;
+        }
+    };
+
+    reader.onerror = () => {
+        alert('Error al leer el archivo SVG.');
+        event.target.value = null;
+    };
+
+    reader.readAsText(file);
 }
 
 function drawInteractiveElements(targetCtx, scaleRatio) {
@@ -1422,6 +1817,56 @@ function drawInteractiveElements(targetCtx, scaleRatio) {
         }
         targetCtx.restore();
     });
+
+    if (isGroupSelection(selectedInteractiveElement)) {
+        const gx = selectedInteractiveElement.x * scaleRatio;
+        const gy = selectedInteractiveElement.y * scaleRatio;
+        const gw = selectedInteractiveElement.width * scaleRatio;
+        const gh = selectedInteractiveElement.height * scaleRatio;
+        const gcx = gx + gw / 2;
+        const gcy = gy + gh / 2;
+
+        targetCtx.save();
+        targetCtx.translate(gcx, gcy);
+        targetCtx.strokeStyle = 'cyan';
+        targetCtx.lineWidth = 3 * scaleRatio;
+        targetCtx.setLineDash([5 * scaleRatio, 5 * scaleRatio]);
+        targetCtx.strokeRect(-gw/2 - 2*scaleRatio, -gh/2 - 2*scaleRatio, gw + 4*scaleRatio, gh + 4*scaleRatio);
+        targetCtx.setLineDash([]);
+
+        if (currentToolMode === 'move') {
+            const rad = TRANSFORM_HANDLE_RADIUS * scaleRatio;
+            targetCtx.fillStyle = 'cyan';
+            targetCtx.strokeStyle = 'blue';
+            targetCtx.lineWidth = 1 * scaleRatio;
+
+            const drawHandle = (hx, hy) => {
+                targetCtx.beginPath();
+                targetCtx.arc(hx, hy, rad, 0, Math.PI * 2);
+                targetCtx.fill();
+                targetCtx.stroke();
+            };
+
+            drawHandle(-gw/2, -gh/2);
+            drawHandle(0, -gh/2);
+            drawHandle(gw/2, -gh/2);
+            drawHandle(-gw/2, 0);
+            drawHandle(gw/2, 0);
+            drawHandle(-gw/2, gh/2);
+            drawHandle(0, gh/2);
+            drawHandle(gw/2, gh/2);
+
+            targetCtx.beginPath();
+            targetCtx.moveTo(0, -gh/2);
+            targetCtx.lineTo(0, -gh/2 - (TRANSFORM_ROTATE_HANDLE_OFFSET - 3) * scaleRatio);
+            targetCtx.stroke();
+
+            targetCtx.beginPath();
+            targetCtx.arc(0, -gh/2 - TRANSFORM_ROTATE_HANDLE_OFFSET * scaleRatio, TRANSFORM_ROTATE_HANDLE_RADIUS * scaleRatio, 0, Math.PI * 2);
+            targetCtx.fill();
+        }
+        targetCtx.restore();
+    }
 }
 
 function exportTrackAsCanvas() {
@@ -1660,6 +2105,7 @@ function updateInteractiveUI(mode, elems) {
 function updateSelectedInteractiveElement() {
     // Only allow live editing of a placed interactive while in move mode.
     if (currentToolMode !== 'move') return;
+    if (isGroupSelection(selectedInteractiveElement)) return;
     if(selectedInteractiveElement) {
         const elems = getDOMElements();
         if(!elems) return;

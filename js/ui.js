@@ -109,6 +109,8 @@ export function getDOMElements() {
         trackEditorTrackNameInput: document.getElementById('trackEditorTrackName'),
         saveTrackDesignButton: document.getElementById('saveTrackDesignButton'),
         loadTrackDesignInput: document.getElementById('loadTrackDesignInput'),
+        loadTrackObstaclesSvgInput: document.getElementById('loadTrackObstaclesSvgInput'),
+        loadTrackObstaclesSvgFitInput: document.getElementById('loadTrackObstaclesSvgFitInput'),
         exportTrackToSimulatorButton: document.getElementById('exportTrackToSimulator'),
         trackPartsPalette: document.getElementById('trackPartsPalette'),
         trackEditorControls: document.querySelector('.track-editor-controls'),
